@@ -1,0 +1,86 @@
+services:
+  stremio-nas-api:
+    build: ./server
+    container_name: stremio-nas-api
+    restart: unless-stopped
+    ports:
+      - "3001:3000" # Map host port 3001 to container port 3000
+    environment:
+      # Server configuration
+      - PORT=3000
+      - MEDIA_DIR=/data/videos
+      
+      # File filtering
+      - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
+      - ALLOW_TORRENTS=true # Set to 'false' to disable torrent scanning
+      
+      # API configuration
+      - API_HOST=http://localhost:3001 # IMPORTANT: Update with your NAS IP and mapped port
+      
+      # Logging
+      - LOG_LEVEL=info # Options: error, warn, info, debug
+    volumes:
+      # For Linux/Unix systems (e.g., Synology NAS):
+      # - /volume1/video:/data/videos:ro
+      # - /mnt/media/videos:/data/videos:ro
+      
+      # For Windows (Docker Desktop):
+      # Option 1: Use Windows path format (requires Docker Desktop file sharing)
+      # - C:\Users\YourName\Videos:/data/videos:ro
+      # - D:\Media\Videos:/data/videos:ro
+      
+      # Option 2: Use WSL2 path format (if using WSL2 backend)
+      # - /mnt/c/Users/YourName/Videos:/data/videos:ro
+      # - /mnt/d/Media/Videos:/data/videos:ro
+      
+      # Option 3: Use relative path (relative to docker-compose.yml location)
+      # - ./videos:/data/videos:ro
+      
+      # Example: Map a Windows folder (adjust path to your actual folder)
+      - C:\movies:/data/videos:ro
+    networks:
+      - media-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  stremio-nas-addon:
+    build: ./addon
+    container_name: stremio-nas-addon
+    restart: unless-stopped
+    ports:
+      - "1222:1222" # Map host port 1222 to container port 1222
+    environment:
+      # Media API Server URL (use service name for internal Docker network)
+      - MEDIA_API_URL=http://stremio-nas-api:3000
+      
+      # External API URL for stream URLs (accessible from Stremio)
+      - API_HOST=http://localhost:3001
+      
+      # Addon configuration
+      - PORT=1222 # Port for the Stremio addon HTTP server
+      
+      # Storage path (for persistence)
+      - STORAGE_PATH=/data/storage
+    volumes:
+      # Persist addon storage/indexes
+      # Using named volume for better portability across platforms
+      # Mount to /data so storage files can be created inside
+      - stremio-storage:/data
+    networks:
+      - media-network
+    depends_on:
+      stremio-nas-api:
+        condition: service_started # Wait for API container to start
+
+volumes:
+  stremio-storage:
+    driver: local
+
+networks:
+  media-network:
+    driver: bridge
+

@@ -1,0 +1,42 @@
+{
+  "name": "stremio-nas-api",
+  "version": "1.0.0",
+  "description": "Media API server for streaming NAS video files to Stremio",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "NODE_ENV=development node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@ctrl/video-filename-parser": "^5.4.1",
+    "better-sqlite3": "^12.5.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "mime-types": "^3.0.2",
+    "morgan": "^1.10.0",
+    "name-to-imdb": "^3.0.4",
+    "node-cron": "^4.2.1",
+    "oleoo": "^2.0.4",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "winston": "^3.19.0"
+  },
+  "keywords": [
+    "media",
+    "api",
+    "streaming",
+    "video",
+    "docker"
+  ],
+  "author": "Anime Source",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anime-src/stremio-nas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anime-src/stremio-nas/issues"
+  },
+  "homepage": "https://github.com/anime-src/stremio-nas#readme"
+}

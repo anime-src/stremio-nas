@@ -1,0 +1,36 @@
+{
+  "name": "stremio-nas-addon",
+  "version": "1.0.0",
+  "description": "Stremio add-on for streaming video files from NAS via Media API",
+  "main": "index.js",
+  "dependencies": {
+    "node-fetch": "^2.3.0",
+    "stremio-addon-sdk": "^1.6.10",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "stremio-addon-client": "^1.12.1",
+    "tape": "^4.10.1"
+  },
+  "scripts": {
+    "test": "node test/index",
+    "start": "node bin/addon"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anime-src/stremio-nas.git"
+  },
+  "keywords": [
+    "stremio",
+    "network",
+    "api",
+    "media",
+    "streaming"
+  ],
+  "author": "Anime Source",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/anime-src/stremio-nas/issues"
+  },
+  "homepage": "https://github.com/anime-src/stremio-nas#readme"
+}

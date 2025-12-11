@@ -1,0 +1,48 @@
+services:
+  stremio-nas-addon:
+    build: .
+    container_name: stremio-nas-addon
+    restart: unless-stopped
+    ports:
+      - "1222:1222" # Map host port 1222 to container port 1222
+    environment:
+      # Media API Server URL (required)
+      - MEDIA_API_URL=http://stremio-nas-api:3000 # Use service name if running together, or external URL
+      
+      # Addon configuration
+      - PORT=1222 # Port for the Stremio addon HTTP server
+      
+      # Storage path (for persistence)
+      - STORAGE_PATH=/data/storage
+    volumes:
+      # Persist addon storage/indexes
+      - ./storage:/data/storage
+    networks:
+      - media-network
+    depends_on:
+      - stremio-nas-api # Optional: only needed if API is in the same compose file
+
+  # Optional: Include API service if you want to run both together
+  # Uncomment the following if you want to run both services in one compose file
+  # stremio-nas-api:
+  #   build: ../server
+  #   container_name: stremio-nas-api
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3001:3000"
+  #   environment:
+  #     - PORT=3000
+  #     - MEDIA_DIR=/data/videos
+  #     - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
+  #     - ALLOW_TORRENTS=true
+  #     - API_HOST=http://localhost:3001
+  #     - LOG_LEVEL=info
+  #   volumes:
+  #     - C:\movies:/data/videos:ro
+  #   networks:
+  #     - media-network
+
+networks:
+  media-network:
+    driver: bridge
+

@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+storage
+localFiles
+localFilesMeta
+test
+*.md
+.git
+.gitignore
+.dockerignore
+

@@ -1,0 +1,46 @@
+services:
+  stremio-nas-api:
+    build: .
+    container_name: stremio-nas-api
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      # Server configuration
+      - PORT=3000
+      - MEDIA_DIR=/data/videos
+      
+      # File filtering
+      - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
+      
+      # API configuration
+      - API_HOST=http://localhost:3001
+      
+      # Logging
+      - LOG_LEVEL=info
+    volumes:
+      # For Linux/Unix systems:
+      # - /volume1/video:/data/videos:ro
+      # - /mnt/media/videos:/data/videos:ro
+      
+      # For Windows (Docker Desktop):
+      # Option 1: Use Windows path format (requires Docker Desktop file sharing)
+      # - C:\Users\YourName\Videos:/data/videos:ro
+      # - D:\Media\Videos:/data/videos:ro
+      
+      # Option 2: Use WSL2 path format (if using WSL2 backend)
+      # - /mnt/c/Users/YourName/Videos:/data/videos:ro
+      # - /mnt/d/Media/Videos:/data/videos:ro
+      
+      # Option 3: Use relative path (relative to docker-compose.yml location)
+      # - ./videos:/data/videos:ro
+      
+      # Example: Map Windows folder (adjust path to your actual folder)
+      - C:\movies:/data/videos:ro
+    networks:
+      - media-network
+
+networks:
+  media-network:
+    driver: bridge
+
