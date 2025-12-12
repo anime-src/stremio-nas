@@ -8,7 +8,10 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
 - **HTTP Streaming**: Streams videos via HTTP URLs with Range support for seeking (ID-based URLs)
 - **IMDB Matching**: Only indexes files with IMDB IDs (matching original addon behavior)
 - **Rich Metadata**: Displays resolution, codec, source, release group, and file size in stream titles
-- **Lightweight Index**: Fast, scalable in-memory indexing with on-demand fetching (~5MB for 100K files)
+- **Periodic Polling**: Automatically refreshes file index from API server at configurable intervals
+- **Hybrid Index + On-Demand**: Lightweight in-memory index (~50 bytes per file) with on-demand fetching of full details
+- **LRU Caching**: Caches frequently accessed file details and metadata for fast access
+- **Scalable**: Handles 100K+ files with minimal memory footprint (~5MB for 100K files)
 - **Structured Logging**: Winston-based logging with configurable log levels
 - **Docker Ready**: Can run in Docker containers
 - **No Filesystem Access**: Completely network-based, no SMB/NFS/local filesystem access
@@ -33,11 +36,18 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
 ### Option 1: Docker (Recommended)
 
 1. **Configure the API URL**:
-   Edit `docker-compose.yml` (in project root) and set `MEDIA_API_URL`:
+   Edit `docker-compose.yml` (in project root) and set environment variables:
    ```yaml
    environment:
-     - MEDIA_API_URL=http://stremio-nas-api:3000  # Internal Docker network
-     - API_HOST=http://localhost:3001  # External URL for Stremio
+     # Internal URL: Addon connects to API server
+     - API_INTERNAL_URL=http://stremio-nas-api:3000  # Use Docker service name
+     
+     # External URL: Stremio uses this to stream videos
+     - STREAM_BASE_URL=http://localhost:3001  # Use your NAS IP here
+     
+     # Polling configuration
+     - POLL_INTERVAL_MINUTES=5  # Poll every 5 minutes
+     - ENABLE_POLLING=true       # Enable automatic updates
    ```
 
 2. **Build and start**:
@@ -69,15 +79,21 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
    npm install
    ```
 
-2. **Configure the API URL**:
-   Set the `MEDIA_API_URL` environment variable:
+2. **Configure environment variables**:
+   Set the API URLs and polling configuration:
    ```bash
-   export MEDIA_API_URL=http://your-server-ip:3000
+   export API_INTERNAL_URL=http://your-server-ip:3000
+   export STREAM_BASE_URL=http://your-server-ip:3001
+   export POLL_INTERVAL_MINUTES=5
+   export ENABLE_POLLING=true
    ```
    
    Or on Windows:
    ```cmd
-   set MEDIA_API_URL=http://your-server-ip:3000
+   set API_INTERNAL_URL=http://your-server-ip:3000
+   set STREAM_BASE_URL=http://your-server-ip:3001
+   set POLL_INTERVAL_MINUTES=5
+   set ENABLE_POLLING=true
    ```
 
 3. **Start the addon**:
@@ -93,10 +109,13 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MEDIA_API_URL` | `http://localhost:3000` | URL of the Stremio NAS API server (internal Docker network) |
-| `API_HOST` | `http://localhost:3001` | External URL for stream URLs (accessible from Stremio) |
+| `API_INTERNAL_URL` | `http://localhost:3000` | Internal URL for addon to fetch files from API server (use Docker service name or external URL). Also accepts `MEDIA_API_URL` for backward compatibility. |
+| `STREAM_BASE_URL` | `http://localhost:3001` | External base URL for stream URLs that Stremio will use to play videos (must be accessible from Stremio). Also accepts `API_HOST` for backward compatibility. |
 | `PORT` | `1222` | Port for the Stremio addon HTTP server |
 | `LOG_LEVEL` | `debug` | Logging level: `error`, `warn`, `info`, `debug` |
+| `POLL_INTERVAL_MINUTES` | `5` | Interval to poll API for file updates (in minutes) |
+| `ENABLE_POLLING` | `true` | Set to `false` to disable periodic polling (only indexes on startup) |
+| `MAX_INDEXED` | `10000` | Maximum number of files to index in memory (safety limit) |
 
 ### Docker Compose Configuration
 
@@ -112,16 +131,20 @@ For a server at IP `192.168.1.100` with API on port 3001:
 **Docker (in docker-compose.yml):**
 ```yaml
 environment:
-  - MEDIA_API_URL=http://stremio-nas-api:3000  # Internal Docker network
-  - API_HOST=http://192.168.1.100:3001  # External URL
+  - API_INTERNAL_URL=http://stremio-nas-api:3000  # Internal Docker network
+  - STREAM_BASE_URL=http://192.168.1.100:3001     # External URL for Stremio
   - PORT=1222
+  - POLL_INTERVAL_MINUTES=5                        # Poll every 5 minutes
+  - ENABLE_POLLING=true                            # Enable automatic updates
+  - LOG_LEVEL=debug
 ```
 
 **Local Node.js:**
 ```bash
-export MEDIA_API_URL=http://192.168.1.100:3001
-export API_HOST=http://192.168.1.100:3001
+export API_INTERNAL_URL=http://192.168.1.100:3001
+export STREAM_BASE_URL=http://192.168.1.100:3001
 export PORT=1222
+export POLL_INTERVAL_MINUTES=5
 npm start
 ```
 
@@ -157,9 +180,19 @@ services:
     ports:
       - "1222:1222"
     environment:
-      - MEDIA_API_URL=http://stremio-nas-api:3000
-      - API_HOST=http://localhost:3001
+      # Internal URL for fetching files
+      - API_INTERNAL_URL=http://stremio-nas-api:3000
+      
+      # External URL for streaming (use your NAS IP)
+      - STREAM_BASE_URL=http://localhost:3001
+      
+      # Polling configuration
+      - POLL_INTERVAL_MINUTES=5
+      - ENABLE_POLLING=true
+      
+      # Server config
       - PORT=1222
+      - LOG_LEVEL=debug
     networks:
       - media-network
     depends_on:
@@ -172,13 +205,16 @@ networks:
 
 ## How It Works
 
-1. **File Discovery**: The addon calls `GET /files` on the Stremio NAS API to retrieve a list of video files with metadata
+1. **Initial File Discovery**: On startup, the addon calls `GET /files` on the Stremio NAS API to retrieve video files with metadata
 2. **IMDB Filtering**: Only files with IMDB IDs are indexed (matching original addon behavior)
-3. **In-Memory Indexing**: Files are indexed in memory (no disk persistence - rebuilt from API on each startup)
-4. **Catalog Generation**: Each file becomes a catalog item using IMDB ID and parsed name
-5. **Streaming**: When Stremio requests a stream, the addon constructs the HTTP URL using file ID (`/stream/{id}`)
-6. **Metadata Enrichment**: Stream titles include resolution, codec, source, release group, and file size
-7. **No Filesystem Access**: All file operations happen on the Stremio NAS API server, not on the addon machine
+3. **Lightweight Indexing**: Files are indexed in memory (~50 bytes per file) with pre-aggregation by IMDB ID
+4. **Periodic Polling**: Every N minutes (configurable), the addon polls the API for updates and incrementally updates the index
+5. **Catalog Generation**: Each IMDB ID becomes a catalog item using lightweight index data (fast)
+6. **On-Demand Fetching**: When Stremio requests metadata or streams, the addon fetches full file details from API (with LRU caching)
+7. **Metadata Enrichment**: Stream titles include resolution, codec, source, release group, and file size (fetched from full details)
+8. **Streaming**: The addon constructs HTTP URLs using file ID (`{STREAM_BASE_URL}/stream/{id}`)
+9. **Caching**: Frequently accessed file details and metadata are cached in LRU caches (1000 items, 30min TTL)
+10. **No Filesystem Access**: All file operations happen on the Stremio NAS API server, not on the addon machine
 
 ## Adding to Stremio
 
@@ -203,12 +239,12 @@ The addon expects the Stremio NAS API to return files in this format:
 [
   {
     "id": 1,
-    "type": "video",
+    "type": "movie",
     "name": "Movie1.mkv",
     "path": "Movie1.mkv",
     "size": 104857600,
+    "mtime": 1704067200000,
     "parsedName": "Movie 1",
-    "fileType": "movie",
     "imdb_id": "tt1234567",
     "resolution": "1080p",
     "source": "WEB-DL",
@@ -216,23 +252,30 @@ The addon expects the Stremio NAS API to return files in this format:
     "audioCodec": "AAC",
     "releaseGroup": "RARBG",
     "season": null,
-    "episode": null
+    "episode": null,
+    "imdbName": "Movie 1",
+    "imdbYear": 2023
   }
 ]
 ```
 
-**Note**: Stream URLs are constructed by the addon using the `id` field: `{API_HOST}/stream/{id}`. The API no longer returns a `url` field.
+**API Endpoints Used**:
+- `GET /files`: Fetch all files for periodic polling
+- `GET /files?imdb_id=tt1234567`: Fetch files for a specific IMDB ID (on-demand)
+
+**Note**: Stream URLs are constructed by the addon using the `id` field: `{STREAM_BASE_URL}/stream/{id}`. The API no longer returns a `url` field.
 
 ## Troubleshooting
 
 ### Addon Can't Connect to API
 
-1. **Check API URL**: Verify `MEDIA_API_URL` is set correctly
+1. **Check API URL**: Verify `API_INTERNAL_URL` is set correctly (use Docker service name for internal communication)
 2. **Test API**: Try `curl http://your-server-ip:3001/files` to verify API is running
 3. **Check Network**: Ensure addon machine can reach the server IP
 4. **Check Firewall**: Ensure port 3001 (or your mapped port) is accessible
 5. **Docker Network**: If using Docker, ensure both containers are on the same network (`media-network`)
-6. **Service Name**: In Docker, use service name `stremio-nas-api` for internal communication
+6. **Service Name**: In Docker, use service name `stremio-nas-api` for `API_INTERNAL_URL`
+7. **Polling**: Check addon logs for "Files fetched from API" messages (should appear every N minutes)
 
 ### No Files Appearing in Stremio
 
@@ -244,11 +287,12 @@ The addon expects the Stremio NAS API to return files in this format:
 
 ### Streaming Not Working
 
-1. **Check Stream URL**: Verify the addon constructs URLs correctly (uses `API_HOST` environment variable)
+1. **Check Stream URL**: Verify the addon constructs URLs correctly (uses `STREAM_BASE_URL` environment variable)
 2. **Test Stream Directly**: Try opening `http://your-nas-ip:3001/stream/1` in a browser or VLC (use file ID from `/files` response)
 3. **Check Range Support**: Ensure API supports Range headers (required for seeking)
 4. **Check Network**: Ensure Stremio can reach the NAS IP and port
-5. **Check API_HOST**: Verify `API_HOST` is set to the external accessible URL
+5. **Check STREAM_BASE_URL**: Verify `STREAM_BASE_URL` is set to the external accessible URL (must be reachable from Stremio)
+6. **Check Metadata**: Verify stream titles show resolution/codec (indicates on-demand fetch is working)
 
 ### Port Already in Use
 
@@ -272,9 +316,12 @@ Then update the addon URL in Stremio to: `http://localhost:1223/manifest.json`
 
 1. **Start Media API Server** (see `../server/README.md`)
 
-2. **Set API URL**:
+2. **Set environment variables**:
    ```bash
-   export MEDIA_API_URL=http://localhost:3000
+   export API_INTERNAL_URL=http://localhost:3000
+   export STREAM_BASE_URL=http://localhost:3001
+   export POLL_INTERVAL_MINUTES=1  # Fast polling for testing
+   export LOG_LEVEL=debug
    ```
 
 3. **Run addon**:
@@ -284,32 +331,43 @@ Then update the addon URL in Stremio to: `http://localhost:1223/manifest.json`
 
 4. **Test endpoints**:
    ```bash
+   # Check manifest
    curl http://localhost:1222/manifest.json
+   
+   # Check catalog (should show indexed items)
+   curl http://localhost:1222/catalog/movie/api.json
    ```
 
 ### Code Structure
 
-- `index.js`: Main addon entry point, handles Stremio requests
-- `bin/addon.js`: Startup script
-- `lib/api/index.js`: API client that fetches files from Stremio NAS API
-- `lib/handlers/catalog.js`: Generates catalog from API file list
-- `lib/handlers/stream.js`: Returns HTTP stream URLs constructed from file IDs
-- `lib/handlers/meta.js`: Handles metadata requests with enriched stream titles
-- `lib/utils/helpers.js`: Helper functions for URL construction and title formatting
-- `lib/storage/lightweight-index.js`: Lightweight in-memory index (~50 bytes per file)
-- `lib/services/index.manager.js`: Index manager with LRU caching and on-demand fetching
+- `index.js`: Main addon entry point (addonBuilder, startIndexing)
+- `bin/addon.js`: Startup script (serveHTTP, starts polling)
+- `lib/api/media.client.js`: API client for fetching files from Stremio NAS API (supports filtering by `imdb_id`)
+- `lib/api/cinemeta.client.js`: API client for fetching metadata from Cinemeta API
+- `lib/services/index.manager.js`: Index manager with LRU caching for full details and metadata, on-demand fetching
+- `lib/services/polling.service.js`: Polling service for periodic API updates (configurable interval)
+- `lib/handlers/catalog.js`: Catalog handler (uses lightweight index, fast)
+- `lib/handlers/meta.js`: Meta handler (on-demand fetch with caching, enriched metadata)
+- `lib/handlers/stream.js`: Stream handler (on-demand fetch with caching, enriched titles)
+- `lib/storage/lightweight-index.js`: Lightweight in-memory index (~50 bytes per file, pre-aggregated by IMDB ID)
+- `lib/config/index.js`: Centralized configuration (environment variables)
 - `lib/config/logger.js`: Winston logger configuration
+- `lib/utils/helpers.js`: Helper functions (URL construction, title formatting)
+- `lib/utils/consts.js`: Constants (URLs, prefixes)
 
 ## Differences from Original Addon
 
 This version differs from the original `stremio-local-addon`:
 
 - **No Filesystem Scanning**: Uses API instead of platform-specific file finders
+- **Periodic Polling**: Automatically updates index from API at configurable intervals
 - **IMDB Filtering**: Only indexes files with IMDB IDs (matching original behavior)
 - **HTTP URLs**: Returns HTTP stream URLs (ID-based) instead of `file://` URLs
 - **Network-Based**: Completely network-based, no local file access
-- **Lightweight Index**: Hybrid approach with minimal memory footprint and LRU caching
+- **Hybrid Index + On-Demand**: Lightweight in-memory index (~50 bytes/file) with on-demand fetching of full details
+- **LRU Caching**: Caches frequently accessed file details and metadata (1000 items, 30min TTL)
 - **Rich Metadata**: Enhanced stream titles with resolution, codec, source, and file size
+- **Scalable**: Handles 100K+ files with ~5MB memory footprint
 - **Structured Logging**: Winston-based logging instead of console.log
 - **Docker Support**: Can run in Docker/Podman containers
 

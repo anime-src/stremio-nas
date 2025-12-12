@@ -6,16 +6,18 @@ A Node.js Express API server that runs in Docker to serve video files over HTTP 
 
 - **File Listing**: Scan and list video files from mounted directory with rich metadata
 - **HTTP Streaming**: Stream video files with Range header support for seeking (ID-based URLs)
+- **Streaming Optimizations**: Large buffers (512KB), HTTP caching headers, HEAD request support, file stats caching
 - **Database Storage**: SQLite database for persistent file metadata storage
 - **Periodic Scanning**: Automatic file system scanning with configurable intervals (cron-based)
 - **Metadata Extraction**: Extracts video metadata (resolution, codec, source, release group) from filenames
 - **IMDB Integration**: Automatic IMDB ID matching and metadata enrichment
 - **API Documentation**: Interactive Swagger UI at `/api-docs`
+- **Query Filters**: Filter files by extension, IMDB ID, or filename (partial search)
 - **MIME Type Detection**: Automatically detects correct content type based on file extension
 - **Structured Logging**: Winston-based logging with configurable log levels
 - **CORS Enabled**: Cross-origin requests supported
 - **Docker Ready**: Pre-configured for Docker and Docker Compose
-- **Large File Support**: Efficiently handles 4K videos and 10GB+ files
+- **Large File Support**: Efficiently handles 4K videos and 10GB+ files with optimized streaming
 
 ## Prerequisites
 
@@ -122,32 +124,43 @@ Set `LOG_LEVEL` environment variable to control verbosity. Logs include timestam
 
 List all video files in the media directory.
 
-**Query Parameters**:
-- `ext` (optional): Filter by extension (e.g., `?ext=.mp4`)
+**Query Parameters** (priority: `imdb_id` > `name` > `ext`):
+- `imdb_id` (optional): Filter by IMDB ID (e.g., `?imdb_id=tt1234567`) - **Highest priority**
+- `name` (optional): Filter by filename (partial, case-insensitive, min 2 chars, e.g., `?name=Matrix`) - **Second priority**
+- `ext` (optional): Filter by extension (e.g., `?ext=.mp4`) - **Third priority**
 
 **Response**:
 ```json
 [
   {
     "id": 1,
-    "type": "video",
+    "type": "movie",
     "name": "Movie1.mkv",
     "path": "Movie1.mkv",
     "size": 104857600,
     "mtime": 1704067200000,
     "parsedName": "Movie 1",
-    "fileType": "movie",
     "imdb_id": "tt1234567",
     "resolution": "1080p",
     "source": "WEB-DL",
     "videoCodec": "HEVC",
     "audioCodec": "AAC",
+    "audioChannels": "5.1",
     "releaseGroup": "RARBG",
     "season": null,
-    "episode": null
+    "episode": null,
+    "imdbName": "Movie 1",
+    "imdbYear": 2023,
+    "imdbType": "movie"
   }
 ]
 ```
+
+**Examples**:
+- `GET /files` - Get all files
+- `GET /files?imdb_id=tt1234567` - Get files for specific IMDB ID (used by addon for on-demand fetch)
+- `GET /files?name=Matrix` - Search files by name (for testing in Swagger)
+- `GET /files?ext=.mkv` - Filter by extension
 
 **Note**: Stream URLs are constructed using the `id` field: `http://API_HOST/stream/{id}`
 
@@ -155,14 +168,31 @@ List all video files in the media directory.
 
 Stream a video file with Range header support for seeking. Uses file ID from database (not filename). MIME type is automatically detected based on file extension.
 
-**Headers**:
+**Request Headers**:
 - `Range`: Optional, for partial content requests (e.g., `bytes=0-1023`)
 
-**Response**: Video stream with appropriate headers:
+**Response Headers**:
 - `Content-Type`: Automatically detected MIME type (e.g., `video/mp4`, `video/x-matroska`)
 - `Content-Length`: File size or chunk size for partial requests
 - `Accept-Ranges`: `bytes`
 - `Content-Range`: For partial requests (e.g., `bytes 0-1023/1048576`)
+- `Cache-Control`: `public, max-age=31536000, immutable` (for better seeking)
+- `Last-Modified`: File modification time (for conditional requests)
+- `ETag`: File signature (for cache validation)
+- `Content-Encoding`: `identity` (prevents compression)
+
+**Streaming Optimizations**:
+- Large read buffers (512KB) for better throughput
+- File stats caching (5min TTL) to avoid repeated disk operations
+- HTTP server optimizations (no timeout, keepAlive, headers timeout)
+- Proper stream cleanup on client disconnect
+
+### HEAD /stream/:id
+
+Get video file headers without downloading content. Useful for checking existence and metadata.
+
+**Response Headers**: Same as GET (without body)
+- `Content-Type`, `Content-Length`, `Accept-Ranges`, `Cache-Control`, `Last-Modified`, `ETag`
 
 ### GET /files/stats
 
@@ -267,9 +297,12 @@ The API listens on `0.0.0.0` to accept connections from other devices on your ne
 ### Streaming Issues
 
 1. **Range header support**: The API automatically handles Range requests for seeking
-2. **Large files**: The API uses streaming, so large files should work fine
+2. **Large files**: The API uses streaming with 512KB buffers and optimized settings
 3. **Network**: Ensure your client can reach the NAS IP and port
 4. **ID-based URLs**: Stream URLs use database IDs (e.g., `/stream/1`), not filenames
+5. **HEAD requests**: Use `HEAD /stream/:id` to check file existence without downloading
+6. **Caching**: Response includes caching headers for better seeking performance
+7. **File stats cache**: File stats cached for 5 minutes to reduce disk operations
 
 ### Database Issues
 
@@ -308,9 +341,24 @@ The API listens on `0.0.0.0` to accept connections from other devices on your ne
 
 3. **Test endpoints**:
    ```bash
+   # List all files
    curl http://localhost:3000/files
-   curl http://localhost:3000/stream/1  # Use file ID from /files response
-   curl http://localhost:3000/api-docs   # View Swagger documentation
+   
+   # Filter by IMDB ID
+   curl http://localhost:3000/files?imdb_id=tt1234567
+   
+   # Search by filename
+   curl http://localhost:3000/files?name=Matrix
+   
+   # Filter by extension
+   curl http://localhost:3000/files?ext=.mkv
+   
+   # Test streaming (use file ID from /files response)
+   curl -I http://localhost:3000/stream/1  # HEAD request
+   curl http://localhost:3000/stream/1     # GET request
+   
+   # View Swagger documentation
+   curl http://localhost:3000/api-docs
    ```
 
 ## License
