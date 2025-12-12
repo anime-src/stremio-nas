@@ -45,6 +45,11 @@ async function startServer() {
     });
   });
 
+  // Optimize HTTP server for video streaming
+  server.setTimeout(0); // Disable timeout for long-running streams
+  server.keepAliveTimeout = 65000; // Keep connections alive (65s)
+  server.headersTimeout = 66000; // Slightly higher than keepAlive (66s)
+
   // Graceful shutdown
   const shutdown = () => {
     logger.info('Shutdown signal received, shutting down gracefully');

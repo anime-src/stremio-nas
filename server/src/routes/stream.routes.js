@@ -17,6 +17,47 @@ const { validateFileId } = require('../middleware/validators');
 /**
  * @swagger
  * /stream/{id}:
+ *   head:
+ *     summary: Get file metadata
+ *     tags: [Streaming]
+ *     description: Get file metadata without downloading content (fast metadata query for players)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: File ID from database
+ *     responses:
+ *       200:
+ *         description: File metadata (no body, headers only)
+ *         headers:
+ *           Content-Type:
+ *             schema:
+ *               type: string
+ *             description: MIME type of the video file
+ *           Content-Length:
+ *             schema:
+ *               type: integer
+ *             description: File size in bytes
+ *           Accept-Ranges:
+ *             schema:
+ *               type: string
+ *             description: Supported range unit (bytes)
+ *           Cache-Control:
+ *             schema:
+ *               type: string
+ *             description: Caching directives
+ *           Last-Modified:
+ *             schema:
+ *               type: string
+ *             description: Last modification time
+ *           ETag:
+ *             schema:
+ *               type: string
+ *             description: Entity tag for caching
+ *       404:
+ *         description: File not found
  *   get:
  *     summary: Stream video file
  *     tags: [Streaming]
@@ -106,6 +147,12 @@ const { validateFileId } = require('../middleware/validators');
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
+// HEAD request for metadata (fast, no body transfer)
+router.head('/:id', validateFileId, (req, res, next) => {
+  streamController.getFileMetadata(req, res, next);
+});
+
+// GET request for streaming
 router.get('/:id', validateFileId, (req, res, next) => {
   streamController.streamFile(req, res, next);
 });
