@@ -7,22 +7,16 @@ const manifest = require('./lib/manifest')
 const catalogHandler = require('./lib/handlers/catalog')
 const metaHandler = require('./lib/handlers/meta')
 const streamHandler = require('./lib/handlers/stream')
-const Storage = require('./lib/storage')
+const LightweightIndex = require('./lib/storage/lightweight-index')
 const fetchFiles = require('./lib/api/media.client')
 const IndexManager = require('./lib/services/index.manager')
 const PollingService = require('./lib/services/polling.service')
 
-// Initiate the storage
-const storage = new Storage({
-	entryIndexes: ['itemId'],
-	maxSize: config.maxIndexed
-})
-const metaStorage = new Storage({
-	maxSize: config.maxIndexed
-})
+// Create lightweight index (replaces Storage)
+const lightweightIndex = new LightweightIndex()
 
-// Create index manager (shared across handlers)
-const indexManager = new IndexManager(storage, metaStorage, config)
+// Create index manager with LRU cache and on-demand fetching
+const indexManager = new IndexManager(lightweightIndex, config, fetchFiles)
 
 // Define the addon
 function addon(options) {

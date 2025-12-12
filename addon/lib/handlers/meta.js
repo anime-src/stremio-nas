@@ -5,6 +5,7 @@ const logger = require('../config/logger')
 
 async function metaHandler(indexManager, args) {
 	try {
+		// Check lightweight index first
 		const entry = indexManager.getEntryByItemId(args.id)
 		if (!entry) {
 			return { meta: null }
@@ -13,9 +14,19 @@ async function metaHandler(indexManager, args) {
 		if (!entry.files || entry.files.length === 0) {
 			return { meta: null }
 		}
+
+		// Get full file details (on-demand fetch with caching)
+		const fullFiles = await indexManager.getFullDetails(entry.itemId)
+		if (!fullFiles || fullFiles.length === 0) {
+			// Fallback to lightweight data
+			logger.warn('Could not fetch full details, using lightweight data', { itemId: args.id })
+		}
+
+		// Use full files if available, otherwise use lightweight files
+		const files = fullFiles || entry.files
 		
 		const uxTime = new Date().getTime()
-		const videos = entry.files.sort(function(a, b) {
+		const videos = files.sort(function(a, b) {
 			// If we have season and episode, sort videos; otherwise retain the order
 			try {
 				return a.season - b.season || a.episode - b.episode;
@@ -25,10 +36,21 @@ async function metaHandler(indexManager, args) {
 			return mapFile(entry, uxTime, file, index)
 		})
 
-		// Get meta from storage or fetch from Cinemeta
+		// Get meta from cache or fetch from Cinemeta
 		let meta = indexManager.getMeta(entry.itemId)
 		if (!meta) {
-			meta = await fetchMetadata(entry)
+			// Build entry for metadata fetching
+			const metaEntry = {
+				itemId: entry.itemId,
+				name: entry.name,
+				files: files
+			}
+			meta = await fetchMetadata(metaEntry)
+			
+			// Cache the metadata
+			if (meta) {
+				indexManager.setMeta(entry.itemId, meta)
+			}
 		}
 		
 		meta.videos = videos

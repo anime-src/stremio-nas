@@ -26,13 +26,12 @@ class DatabaseService {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type TEXT NOT NULL,
         name TEXT NOT NULL,
         path TEXT UNIQUE NOT NULL,
         size INTEGER NOT NULL,
         mtime INTEGER NOT NULL,
         parsedName TEXT,
-        fileType TEXT,
+        type TEXT,
         imdb_id TEXT,
         season INTEGER,
         episode INTEGER,
@@ -57,7 +56,7 @@ class DatabaseService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_files_imdb ON files(imdb_id);
-      CREATE INDEX IF NOT EXISTS idx_files_type ON files(fileType);
+      CREATE INDEX IF NOT EXISTS idx_files_type ON files(type);
       CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
       CREATE INDEX IF NOT EXISTS idx_files_name ON files(name);
       CREATE INDEX IF NOT EXISTS idx_files_resolution ON files(resolution);
@@ -94,14 +93,14 @@ class DatabaseService {
     // Prepare statements (faster than dynamic queries)
     this.stmts = {
       insertFile: this.db.prepare(`
-        INSERT INTO files (type, name, path, size, mtime, parsedName, fileType, imdb_id, season, episode, resolution, source, videoCodec, audioCodec, audioChannels, languages, releaseGroup, flags, edition, imdbName, imdbYear, imdbType, yearRange, image, starring, similarity, updatedAt)
-        VALUES (@type, @name, @path, @size, @mtime, @parsedName, @fileType, @imdb_id, @season, @episode, @resolution, @source, @videoCodec, @audioCodec, @audioChannels, @languages, @releaseGroup, @flags, @edition, @imdbName, @imdbYear, @imdbType, @yearRange, @image, @starring, @similarity, CURRENT_TIMESTAMP)
+        INSERT INTO files (name, path, size, mtime, parsedName, type, imdb_id, season, episode, resolution, source, videoCodec, audioCodec, audioChannels, languages, releaseGroup, flags, edition, imdbName, imdbYear, imdbType, yearRange, image, starring, similarity, updatedAt)
+        VALUES (@name, @path, @size, @mtime, @parsedName, @type, @imdb_id, @season, @episode, @resolution, @source, @videoCodec, @audioCodec, @audioChannels, @languages, @releaseGroup, @flags, @edition, @imdbName, @imdbYear, @imdbType, @yearRange, @image, @starring, @similarity, CURRENT_TIMESTAMP)
         ON CONFLICT(path) DO UPDATE SET
           name = @name,
           size = @size,
           mtime = @mtime,
           parsedName = @parsedName,
-          fileType = @fileType,
+          type = @type,
           imdb_id = @imdb_id,
           season = @season,
           episode = @episode,
@@ -156,9 +155,9 @@ class DatabaseService {
         FROM files
       `),
       getTypeStats: this.db.prepare(`
-        SELECT fileType, COUNT(*) as count 
+        SELECT type, COUNT(*) as count 
         FROM files 
-        GROUP BY fileType
+        GROUP BY type
       `)
     };
 
@@ -293,6 +292,21 @@ class DatabaseService {
   }
 
   /**
+   * Get files by IMDB ID
+   */
+  getFilesByImdbId(imdbId) {
+    return this.stmts.getFilesByImdb.all(imdbId).map(row => this._parseFileRow(row));
+  }
+
+  /**
+   * Search files by name (case-insensitive partial match)
+   */
+  searchFilesByName(namePattern) {
+    const pattern = `%${namePattern}%`;
+    return this.stmts.searchFiles.all(pattern, pattern).map(row => this._parseFileRow(row));
+  }
+
+  /**
    * Record a scan to history
    */
   recordScan(stats) {
@@ -361,7 +375,7 @@ class DatabaseService {
       uniqueImdb: stats.uniqueImdb,
       totalSize: stats.totalSize,
       byType: typeStats.reduce((acc, row) => {
-        acc[row.fileType || 'unknown'] = row.count;
+        acc[row.type || 'unknown'] = row.count;
         return acc;
       }, {}),
       lastScan: scanHistory[0] || null

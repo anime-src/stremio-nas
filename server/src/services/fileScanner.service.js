@@ -181,13 +181,12 @@ class FileScannerService {
       if (imdbInfo.imdb_id) {
         // Build file info object (id will be set by database auto-increment)
         const fileInfo = {
-          type: 'video',
           name: rawFile.name,
           path: rawFile.path,
           size: rawFile.size,
           mtime: rawFile.mtime,
           parsedName: imdbInfo.parsedName,
-          fileType: imdbInfo.type,
+          type: imdbInfo.type, // movie or series
           imdb_id: imdbInfo.imdb_id,
           season: imdbInfo.season,
           episode: imdbInfo.episode,

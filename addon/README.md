@@ -8,7 +8,7 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
 - **HTTP Streaming**: Streams videos via HTTP URLs with Range support for seeking (ID-based URLs)
 - **IMDB Matching**: Only indexes files with IMDB IDs (matching original addon behavior)
 - **Rich Metadata**: Displays resolution, codec, source, release group, and file size in stream titles
-- **In-Memory Storage**: Fast, lightweight in-memory indexing (no disk persistence)
+- **Lightweight Index**: Fast, scalable in-memory indexing with on-demand fetching (~5MB for 100K files)
 - **Structured Logging**: Winston-based logging with configurable log levels
 - **Docker Ready**: Can run in Docker containers
 - **No Filesystem Access**: Completely network-based, no SMB/NFS/local filesystem access
@@ -296,7 +296,8 @@ Then update the addon URL in Stremio to: `http://localhost:1223/manifest.json`
 - `lib/handlers/stream.js`: Returns HTTP stream URLs constructed from file IDs
 - `lib/handlers/meta.js`: Handles metadata requests with enriched stream titles
 - `lib/utils/helpers.js`: Helper functions for URL construction and title formatting
-- `lib/storage.js`: In-memory storage with indexing capabilities
+- `lib/storage/lightweight-index.js`: Lightweight in-memory index (~50 bytes per file)
+- `lib/services/index.manager.js`: Index manager with LRU caching and on-demand fetching
 - `lib/config/logger.js`: Winston logger configuration
 
 ## Differences from Original Addon
@@ -307,7 +308,7 @@ This version differs from the original `stremio-local-addon`:
 - **IMDB Filtering**: Only indexes files with IMDB IDs (matching original behavior)
 - **HTTP URLs**: Returns HTTP stream URLs (ID-based) instead of `file://` URLs
 - **Network-Based**: Completely network-based, no local file access
-- **In-Memory Storage**: Fast in-memory indexing (no disk persistence)
+- **Lightweight Index**: Hybrid approach with minimal memory footprint and LRU caching
 - **Rich Metadata**: Enhanced stream titles with resolution, codec, source, and file size
 - **Structured Logging**: Winston-based logging instead of console.log
 - **Docker Support**: Can run in Docker/Podman containers

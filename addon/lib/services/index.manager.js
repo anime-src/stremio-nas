@@ -1,101 +1,81 @@
 const logger = require('../config/logger')
 const fetchMetadata = require('../api/cinemeta.client')
-const path = require('path')
+const { LRUCache } = require('lru-cache')
 
 /**
- * Index Manager
- * Manages file indexing operations and storage
+ * Index Manager for Hybrid approach (Option 4)
+ * Manages lightweight index + on-demand fetching with LRU cache
+ * 
+ * Architecture:
+ * - Lightweight index: Fast access to file IDs and basic info
+ * - LRU cache: Caches full file details and metadata for recently accessed items
+ * - On-demand: Fetches full details from API server when not in cache
  */
 class IndexManager {
-	constructor(storage, metaStorage, config) {
-		this.storage = storage
-		this.metaStorage = metaStorage
+	constructor(lightweightIndex, config, fetchFilesFn) {
+		this.index = lightweightIndex
 		this.config = config
+		this.fetchFiles = fetchFilesFn
+		
+		// LRU cache for full file details
+		this.fullDetailsCache = new LRUCache({
+			max: 1000, // Cache last 1000 accessed items
+			ttl: 1000 * 60 * 30, // 30 minutes TTL
+			updateAgeOnGet: true
+		})
+		
+		// LRU cache for enriched metadata
+		this.metaCache = new LRUCache({
+			max: 1000,
+			ttl: 1000 * 60 * 30, // 30 minutes TTL
+			updateAgeOnGet: true
+		})
 	}
 
 	/**
-	 * Add or update a file in the index
-	 * @param {Object} fileData - File data from API
-	 * @returns {boolean} - True if file was indexed, false if skipped
+	 * Update index from files (batch operation)
+	 * @param {Array} files - Array of file objects from API
+	 * @returns {Object} - Update stats
 	 */
-	addFile(fileData) {
-		const filePath = fileData.id || fileData.name
+	updateFromFiles(files) {
+		const before = this.index.size
 		
-		// Skip conditions
-		if (!fileData.imdb_id) {
-			logger.debug('Skipping file without IMDB ID', { name: fileData.name })
-			return false
+		// Filter files with IMDB IDs
+		const filtered = files.filter(f => f.imdb_id)
+		
+		// Update lightweight index
+		this.index.updateFromFiles(filtered)
+		
+		const stats = {
+			total: files.length,
+			indexed: filtered.length,
+			skipped: files.length - filtered.length,
+			added: this.index.size - before,
+			removed: 0,
+			updated: 0
 		}
 		
-		if (this.storage.size >= this.config.maxIndexed) {
-			logger.warn('Max indexed files reached', { maxIndexed: this.config.maxIndexed })
-			return false
-		}
-		
-		const entry = this._buildVideoEntry(fileData)
-		this._saveEntry(filePath, entry)
-		this._createMetaEntry(entry, fileData)
-		
-		logger.debug('File indexed', { filePath, itemId: entry.itemId, imdb_id: fileData.imdb_id })
-		return true
+		logger.debug('Index updated from files', stats)
+		return stats
 	}
 
 	/**
-	 * Remove a file from the index
-	 * @param {string|number} fileId - File ID to remove
-	 */
-	removeFile(fileId) {
-		const filePath = fileId
-		this.storage.removeEntry(filePath)
-		logger.debug('File removed from index', { filePath })
-	}
-
-	/**
-	 * Update a file in the index (remove then add)
-	 * @param {Object} fileData - Updated file data
-	 */
-	updateFile(fileData) {
-		const filePath = fileData.id || fileData.name
-		this.removeFile(filePath)
-		this.addFile(fileData)
-	}
-
-	/**
-	 * Clear all indexed files
-	 */
-	clear() {
-		this.storage.clear()
-		this.metaStorage.clear()
-		logger.info('Index cleared')
-	}
-
-	/**
-	 * Get index statistics
-	 * @returns {Object} - Index stats
-	 */
-	getStats() {
-		return {
-			totalFiles: this.storage.size,
-			totalMeta: this.metaStorage.size,
-			maxIndexed: this.config.maxIndexed
-		}
-	}
-
-	/**
-	 * Get all item IDs for catalog listing
-	 * @returns {Array} - Array of [itemId, entries] tuples
+	 * Get all item IDs for catalog
+	 * @returns {Array<string>} - Array of itemIds
 	 */
 	getAllItemIds() {
-		return this.storage.getAllFromIndex('itemId')
+		const itemIds = this.index.getAllItemIds()
+		// Return in format expected by catalog handler: [[itemId, entries], ...]
+		return itemIds.map(itemId => [itemId, null])
 	}
 
 	/**
-	 * Get aggregated entry by itemId
-	 * @param {string} itemId - Item ID to look up
-	 * @returns {Object|null} - Entry or null if not found
+	 * Get lightweight entry by itemId
+	 * @param {string} itemId - Item ID
+	 * @returns {Object|null} - Lightweight entry or null
 	 */
 	getEntryByItemId(itemId) {
-		return this.storage.getAggrEntry('itemId', itemId, ['files'])
+		return this.index.getByItemId(itemId)
 	}
 
 	/**
@@ -104,122 +84,130 @@ class IndexManager {
 	 * @returns {boolean} - True if exists
 	 */
 	hasItemId(itemId) {
-		return this.storage.hasInIndex('itemId', itemId)
+		return this.index.hasItemId(itemId)
 	}
 
 	/**
 	 * Get entries Map for a specific itemId
 	 * @param {string} itemId - Item ID
-	 * @returns {Map} - Map of entries or empty Map
+	 * @returns {Map} - Map of entries
 	 */
 	getEntriesForItemId(itemId) {
-		return this.storage.getFromIndex('itemId', itemId)
+		return this.index.getEntriesForItemId(itemId)
 	}
 
 	/**
-	 * Get meta from storage
+	 * Get full file details with caching (on-demand fetch)
+	 * This is called by meta handler when detailed info is needed
 	 * @param {string} itemId - Item ID
-	 * @returns {Object|null} - Meta object or null
+	 * @returns {Promise<Array|null>} - Array of full file objects or null
+	 */
+	async getFullDetails(itemId) {
+		// Check cache first
+		const cached = this.fullDetailsCache.get(itemId)
+		if (cached) {
+			logger.debug('Cache hit for full details', { itemId })
+			return cached
+		}
+
+		// Fetch from server with IMDB ID filter
+		const imdbId = itemId.replace('local:', '')
+		try {
+			logger.debug('Fetching full details from API', { itemId, imdbId })
+			
+			// Fetch only files for this IMDB ID (efficient!)
+			const files = await this.fetchFiles({ imdb_id: imdbId })
+			
+			if (files.length === 0) {
+				logger.warn('No files found for IMDB ID', { itemId, imdbId })
+				return null
+			}
+			
+			// Files now have clean 'type' field (movie/series) from API
+			const normalizedFiles = files.map(file => ({
+				...file,
+				type: file.type || 'movie' // Fallback to movie if missing
+			}))
+			
+			// Cache for future requests
+			this.fullDetailsCache.set(itemId, normalizedFiles)
+			logger.debug('Fetched and cached full details', { 
+				itemId, 
+				fileCount: normalizedFiles.length 
+			})
+			
+			return normalizedFiles
+		} catch (err) {
+			logger.error('Failed to fetch full details', { 
+				itemId, 
+				error: err.message,
+				stack: err.stack 
+			})
+			return null
+		}
+	}
+
+	/**
+	 * Get or fetch enriched metadata with caching
+	 * @param {string} itemId - Item ID
+	 * @returns {Object|null} - Metadata object or null
 	 */
 	getMeta(itemId) {
-		return this.metaStorage.getEntry(itemId) || null
+		return this.metaCache.get(itemId) || null
 	}
 
 	/**
-	 * Build video entry from file data
-	 * @private
+	 * Set cached metadata
+	 * @param {string} itemId - Item ID
+	 * @param {Object} meta - Metadata object
 	 */
-	_buildVideoEntry(fileData) {
-		const nameWithoutExt = fileData.parsedName || path.parse(fileData.name).name
-		const itemId = 'local:' + fileData.imdb_id
-		
+	setMeta(itemId, meta) {
+		this.metaCache.set(itemId, meta)
+	}
+
+	/**
+	 * Get index statistics
+	 * @returns {Object} - Stats object
+	 */
+	getStats() {
 		return {
-			itemId: itemId,
-			name: fileData.name,
-			files: [{
-				// Basic file info
-				id: fileData.id,
-				name: fileData.name,
-				length: fileData.size,
-				type: fileData.fileType || fileData.type || 'movie',
-				parsedName: nameWithoutExt,
-				
-				// IMDB info
-				imdb_id: fileData.imdb_id,
-				season: fileData.season || null,
-				episode: fileData.episode || null,
-				
-				// Video metadata
-				resolution: fileData.resolution || null,
-				source: fileData.source || null,
-				videoCodec: fileData.videoCodec || null,
-				audioCodec: fileData.audioCodec || null,
-				audioChannels: fileData.audioChannels || null,
-				languages: fileData.languages || null,
-				releaseGroup: fileData.releaseGroup || null,
-				flags: fileData.flags || null,
-				edition: fileData.edition || null,
-				
-				// IMDB metadata
-				imdbName: fileData.imdbName || null,
-				imdbYear: fileData.imdbYear || null,
-				imdbType: fileData.imdbType || null,
-				yearRange: fileData.yearRange || null,
-				image: fileData.image || null,
-				starring: fileData.starring || null,
-				similarity: fileData.similarity || null
-			}]
+			...this.index.getStats(),
+			fullDetailsCacheSize: this.fullDetailsCache.size,
+			metaCacheSize: this.metaCache.size,
+			maxCacheSize: this.fullDetailsCache.max
 		}
 	}
 
 	/**
-	 * Save entry to storage (upsert - creates or updates)
-	 * @private
+	 * Clear index and all caches
 	 */
-	_saveEntry(filePath, entry) {
-		try {
-			this.storage.setEntry(filePath, entry)
-		} catch (err) {
-			logger.error('Error saving entry', { 
-				filePath, 
-				itemId: entry.itemId, 
-				error: err.message 
-			})
-		}
+	clear() {
+		this.index.clear()
+		this.fullDetailsCache.clear()
+		this.metaCache.clear()
+		logger.info('Index and all caches cleared')
 	}
 
 	/**
-	 * Create meta entry with rich metadata
-	 * @private
+	 * Remove a file from index (for future use)
+	 * @param {string|number} fileId - File ID
 	 */
-	_createMetaEntry(entry, fileData) {
-		if (!entry.files?.length || !entry.itemId) return
-		
-		fetchMetadata(entry)
-			.then((meta) => {
-				try {
-					this.metaStorage.setEntry(meta.id, meta)
-				} catch (err) {
-					logger.error('Error saving metadata', { itemId: meta.id, error: err.message })
-				}
-			})
-			.catch(() => {
-				// Fallback to simple meta
-				const nameWithoutExt = fileData.parsedName || path.parse(fileData.name).name
-				const simpleMeta = {
-					id: entry.itemId,
-					type: fileData.fileType || fileData.type || 'movie',
-					name: nameWithoutExt,
-					poster: null
-				}
-				try {
-					this.metaStorage.setEntry(simpleMeta.id, simpleMeta)
-				} catch (err) {
-					logger.error('Error saving simple metadata', { itemId: simpleMeta.id, error: err.message })
-				}
-			})
+	removeFile(fileId) {
+		// Note: Lightweight index doesn't support individual removal
+		// Would need full re-index from API
+		logger.warn('Individual file removal not supported in lightweight mode', { fileId })
+	}
+
+	/**
+	 * Update a file in index (for future use)
+	 * @param {Object} fileData - File data
+	 */
+	updateFile(fileData) {
+		// Note: Would need full re-index from API
+		logger.warn('Individual file update not supported in lightweight mode', { 
+			fileId: fileData.id 
+		})
 	}
 }
 
 module.exports = IndexManager
-

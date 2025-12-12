@@ -17,11 +17,30 @@ class FilesController {
     const startTime = Date.now();
     
     try {
-      logger.info('Listing files', { extFilter: req.query.ext });
+      logger.info('Listing files', { 
+        extFilter: req.query.ext, 
+        imdbFilter: req.query.imdb_id,
+        nameFilter: req.query.name
+      });
       
       // Get files directly from database
+      // Priority: imdb_id > name > ext > all
       let files;
-      if (req.validatedExt) {
+      if (req.validatedImdbId) {
+        // Filter by IMDB ID in database query (most efficient, exact match)
+        files = db.getFilesByImdbId(req.validatedImdbId);
+        logger.debug('Files filtered by IMDB ID', { 
+          imdb_id: req.validatedImdbId, 
+          count: files.length 
+        });
+      } else if (req.validatedName) {
+        // Filter by name in database query (partial match)
+        files = db.searchFilesByName(req.validatedName);
+        logger.debug('Files filtered by name', { 
+          name: req.validatedName, 
+          count: files.length 
+        });
+      } else if (req.validatedExt) {
         // Filter by extension in database query
         files = db.filterByExtension(req.validatedExt);
         logger.debug('Files filtered by extension', { 

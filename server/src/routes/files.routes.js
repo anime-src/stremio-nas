@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const filesController = require('../controllers/files.controller');
-const { validateExtension } = require('../middleware/validators');
+const { validateExtension, validateImdbId, validateFileName } = require('../middleware/validators');
 
 /**
  * File listing routes
@@ -20,14 +20,33 @@ const { validateExtension } = require('../middleware/validators');
  *   get:
  *     summary: List all video files
  *     tags: [Files]
- *     description: Retrieve a list of all video files with metadata from the database
+ *     description: |
+ *       Retrieve a list of all video files with metadata from the database.
+ *       
+ *       **Filter Priority (only one filter applies):**
+ *       1. `imdb_id` - Exact match by IMDB ID (highest priority)
+ *       2. `name` - Case-insensitive partial match in filename or parsed name
+ *       3. `ext` - Filter by file extension
+ *       4. No filter - Returns all files
  *     parameters:
+ *       - in: query
+ *         name: imdb_id
+ *         schema:
+ *           type: string
+ *           example: tt1234567
+ *         description: Filter by IMDB ID (exact match, e.g., tt1234567)
+ *       - in: query
+ *         name: name
+ *         schema:
+ *           type: string
+ *           example: Pose
+ *         description: Search by filename (case-insensitive partial match, min 2 characters)
  *       - in: query
  *         name: ext
  *         schema:
  *           type: string
  *           example: .mkv
- *         description: Optional filter by file extension (e.g., .mp4, .mkv)
+ *         description: Filter by file extension (e.g., .mp4, .mkv)
  *     responses:
  *       200:
  *         description: List of video files
@@ -38,7 +57,7 @@ const { validateExtension } = require('../middleware/validators');
  *               items:
  *                 $ref: '#/components/schemas/File'
  *       400:
- *         description: Invalid extension parameter
+ *         description: Invalid parameter
  *         content:
  *           application/json:
  *             schema:
@@ -50,7 +69,7 @@ const { validateExtension } = require('../middleware/validators');
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', validateExtension, (req, res, next) => {
+router.get('/', validateExtension, validateImdbId, validateFileName, (req, res, next) => {
   filesController.listFiles(req, res, next);
 });
 

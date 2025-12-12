@@ -44,6 +44,54 @@ function validateFileId(req, res, next) {
 }
 
 /**
+ * Validate IMDB ID query parameter
+ */
+function validateImdbId(req, res, next) {
+  const { imdb_id } = req.query;
+  
+  if (!imdb_id) {
+    return next();
+  }
+
+  // IMDB IDs should start with 'tt' followed by digits
+  if (!/^tt\d+$/.test(imdb_id)) {
+    throw new ApiError(400, 'Invalid IMDB ID format', {
+      provided: imdb_id,
+      expected: 'tt followed by digits (e.g., tt1234567)'
+    });
+  }
+
+  req.validatedImdbId = imdb_id;
+  next();
+}
+
+/**
+ * Validate filename query parameter
+ */
+function validateFileName(req, res, next) {
+  const { name } = req.query;
+  
+  if (!name) {
+    return next();
+  }
+
+  // Basic validation: min length and no null bytes
+  if (name.length < 2) {
+    throw new ApiError(400, 'Filename search must be at least 2 characters', {
+      provided: name.length,
+      minimum: 2
+    });
+  }
+
+  if (name.includes('\0')) {
+    throw new ApiError(400, 'Invalid filename: null bytes not allowed');
+  }
+
+  req.validatedName = name;
+  next();
+}
+
+/**
  * Validate and sanitize file path parameter (deprecated - kept for backward compatibility)
  */
 function validateFilePath(req, res, next) {
@@ -113,6 +161,8 @@ function validateRange(fileSize) {
 module.exports = {
   validateExtension,
   validateFileId,
+  validateImdbId,
+  validateFileName,
   validateFilePath,
   validateRange
 };

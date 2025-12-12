@@ -86,7 +86,7 @@ class PollingService {
 
 			// Process files
 			const changes = this._detectChanges(files)
-			this._applyChanges(changes)
+			this._applyChanges(changes, files)
 
 			// Update last known state
 			this.lastFiles.clear()
@@ -157,41 +157,23 @@ class PollingService {
 
 	/**
 	 * Apply detected changes to index
+	 * For lightweight index, we do a full re-index instead of incremental updates
 	 * @private
 	 */
-	_applyChanges(changes) {
-		let indexedCount = 0
-
-		// Remove deleted files
-		changes.removed.forEach(fileId => {
-			this.indexManager.removeFile(fileId)
-		})
-
-		// Update modified files
-		changes.updated.forEach(file => {
-			if (this.indexManager.updateFile(file)) {
-				indexedCount++
-			}
-		})
-
-		// Add new files
-		changes.added.forEach(file => {
-			if (this.indexManager.addFile(file)) {
-				indexedCount++
-			}
-		})
+	_applyChanges(changes, allFiles) {
+		// Update entire index (batch operation for lightweight index)
+		const stats = this.indexManager.updateFromFiles(allFiles)
 
 		if (changes.added.length > 0 || changes.removed.length > 0 || changes.updated.length > 0) {
 			logger.info('Index updated', {
 				added: changes.added.length,
 				removed: changes.removed.length,
 				updated: changes.updated.length,
-				indexed: indexedCount
+				indexed: stats.indexed
 			})
 		}
 
-		const stats = this.indexManager.getStats()
-		logger.debug('Index stats', stats)
+		logger.debug('Index stats', this.indexManager.getStats())
 	}
 }
 

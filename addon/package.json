@@ -4,6 +4,7 @@
   "description": "Stremio add-on for streaming video files from NAS via Media API",
   "main": "index.js",
   "dependencies": {
+    "lru-cache": "^10.0.0",
     "node-fetch": "^2.3.0",
     "stremio-addon-sdk": "^1.6.10",
     "winston": "^3.19.0"

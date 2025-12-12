@@ -53,11 +53,11 @@ const options = {
               description: 'Parsed title from filename',
               example: 'Movie',
             },
-            fileType: {
+            type: {
               type: 'string',
-              description: 'Media type (movie or series)',
+              description: 'Content type (movie or series)',
               example: 'movie',
-              enum: ['movie', 'series'],
+              enum: ['movie', 'series']
             },
             imdb_id: {
               type: 'string',
