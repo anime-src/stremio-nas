@@ -3,7 +3,7 @@ const { getStreamUrl, buildStreamTitle } = require('../utils/helpers')
 
 const SUPPORTED_TYPES = ['movie', 'series']
 
-function streamHandler(storage, args) {
+function streamHandler(indexManager, args) {
 	if (!SUPPORTED_TYPES.includes(args.type)) {
 		return Promise.resolve({ streams: [] })
 	}
@@ -16,8 +16,8 @@ function streamHandler(storage, args) {
 		const idSplit = args.id.split(':')
 		const itemIdLocal = consts.PREFIX_LOCAL + idSplit[0]
 
-		if (storage.indexes.itemId.has(itemIdLocal)) {
-			const entries = storage.indexes.itemId.get(itemIdLocal)
+		if (indexManager.hasItemId(itemIdLocal)) {
+			const entries = indexManager.getEntriesForItemId(itemIdLocal)
 			for (var entry of entries.values()) {
 				const f = entry.files[0]
 				const fileVideoId = getFileVideoId(f)

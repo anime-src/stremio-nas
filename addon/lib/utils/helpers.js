@@ -1,3 +1,5 @@
+const config = require('../config')
+
 /**
  * Get the external stream URL for a file using file ID
  * @param {Object} file - File object with id (from Media API)
@@ -8,11 +10,13 @@ function getStreamUrl(file) {
 		return ''
 	}
 	
-	const apiHost = process.env.API_HOST || process.env.MEDIA_API_URL || 'http://localhost:3001'
-	// Handle Docker internal hostname - convert to external URL
-	const externalHost = apiHost.includes('stremio-nas-api:') ? 'http://localhost:3001' : apiHost
+	// Use centralized config for stream base URL
+	const streamBaseUrl = config.streamBaseUrl
 	
-	return `${externalHost}/stream/${file.id}`
+	// Handle Docker internal hostname - convert to external URL
+	const externalUrl = streamBaseUrl.includes('stremio-nas-api:') ? 'http://localhost:3001' : streamBaseUrl
+	
+	return `${externalUrl}/stream/${file.id}`
 }
 
 /**

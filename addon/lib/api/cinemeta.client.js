@@ -1,8 +1,13 @@
 const fetch = require('node-fetch')
-const consts = require('./consts')
+const consts = require('../utils/consts')
 const logger = require('../config/logger')
 
-async function mapEntryToMeta(entry) {
+/**
+ * Cinemeta API client for fetching and enriching metadata
+ * @param {Object} entry - Entry object with files and itemId
+ * @returns {Promise<Object>} - Enriched metadata object
+ */
+async function fetchMetadata(entry) {
 
 	// We assume that one torrent may have only one IMDB ID for now: this is the only way to a decent UX now
 	const imdbIdFile = entry.files.find(function(f) { return f.imdb_id })
@@ -110,4 +115,5 @@ async function mapEntryToMeta(entry) {
 	}
 }
 
-module.exports = mapEntryToMeta
+module.exports = fetchMetadata
+

@@ -6,17 +6,27 @@ services:
     ports:
       - "1222:1222" # Map host port 1222 to container port 1222
     environment:
-      # Media API Server URL (required)
-      - MEDIA_API_URL=http://stremio-nas-api:3000 # Use service name if running together, or external URL
+      # Internal URL: Addon connects to API server to fetch file list
+      # Can use Docker service name (internal) or external URL
+      - API_INTERNAL_URL=http://stremio-nas-api:3000
+      # Backward compatibility (deprecated, use API_INTERNAL_URL)
+      - MEDIA_API_URL=http://stremio-nas-api:3000
+      
+      # External URL: Base URL for stream URLs that Stremio will use to play videos
+      # Must be accessible from wherever Stremio is running (use your NAS IP)
+      - STREAM_BASE_URL=http://localhost:3001
+      # Backward compatibility (deprecated, use STREAM_BASE_URL)
+      - API_HOST=http://localhost:3001
       
       # Addon configuration
-      - PORT=1222 # Port for the Stremio addon HTTP server
+      - PORT=1222
       
-      # Storage path (for persistence)
-      - STORAGE_PATH=/data/storage
-    volumes:
-      # Persist addon storage/indexes
-      - ./storage:/data/storage
+      # Polling configuration
+      - POLL_INTERVAL_MINUTES=5 # Poll API every 5 minutes for file updates
+      - ENABLE_POLLING=true # Set to false to disable periodic polling
+      
+      # Logging
+      - LOG_LEVEL=debug
     networks:
       - media-network
     depends_on:

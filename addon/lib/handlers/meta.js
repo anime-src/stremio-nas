@@ -1,17 +1,17 @@
-const mapEntryToMeta = require('../utils/mapEntryToMeta')
+const fetchMetadata = require('../api/cinemeta.client')
 const consts = require('../utils/consts')
 const { getStreamUrl, buildVideoTitle, buildStreamTitle } = require('../utils/helpers')
 const logger = require('../config/logger')
 
-function metaHandler(storage, metaStorage, args) {
-	let entry = storage.getAggrEntry('itemId', args.id, ['files'])
-	if(!entry) {
-		return Promise.resolve({ meta: null });
-	}
-	return Promise.resolve(entry)
-	.then(function(entry) {
+async function metaHandler(indexManager, args) {
+	try {
+		const entry = indexManager.getEntryByItemId(args.id)
+		if (!entry) {
+			return { meta: null }
+		}
+
 		if (!entry.files || entry.files.length === 0) {
-			return Promise.resolve({ meta: null })
+			return { meta: null }
 		}
 		
 		const uxTime = new Date().getTime()
@@ -22,25 +22,24 @@ function metaHandler(storage, metaStorage, args) {
 			} catch(e) {}
 			return 0;
 		}).map(function(file, index) {
-			return mapFile(entry, uxTime, file, index, args.id)
+			return mapFile(entry, uxTime, file, index)
 		})
 
-		return Promise.resolve(metaStorage.indexes.primaryKey.get(entry.itemId))
-		.then(function(meta) {
-			return meta || mapEntryToMeta(entry)
-		})
-		.then(function(meta) {
-			meta.videos = videos
-			return Promise.resolve({ meta: meta })
-		});
-	})
-	.catch(function(err) {
+		// Get meta from storage or fetch from Cinemeta
+		let meta = indexManager.getMeta(entry.itemId)
+		if (!meta) {
+			meta = await fetchMetadata(entry)
+		}
+		
+		meta.videos = videos
+		return { meta: meta }
+	} catch (err) {
 		logger.error('Error in meta handler', { error: err.message, stack: err.stack, itemId: args.id })
-		return Promise.resolve({ meta: null })
-	})
+		return { meta: null }
+	}
 }
 
-function mapFile(entry, uxTime, file, index, itemId) {
+function mapFile(entry, uxTime, file, index) {
 	const streamUrl = getStreamUrl(file)
 	const baseTitle = file.parsedName || entry.name || file.name || 'Unknown'
 	const streamTitle = buildStreamTitle(file, baseTitle)
