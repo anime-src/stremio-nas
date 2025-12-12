@@ -92,7 +92,7 @@ class StreamController {
   }
 
   /**
-   * Stream video file with Range support
+   * Stream video file with Range support (Optimized implementation)
    * @route GET /stream/:id
    */
   async streamFile(req, res, next) {
@@ -168,8 +168,21 @@ class StreamController {
     });
     stream.pipe(res);
     
+    // Cleanup: Destroy stream when response finishes (covers all cases)
+    const cleanup = (reason) => {
+      if (!stream.destroyed) {
+        const duration = Date.now() - startTime;
+        logger.debug('Stream cleanup', { filename, reason, duration: `${duration}ms` });
+        stream.destroy();
+      }
+    };
+    
+    res.on('close', () => cleanup('close'));   // Client disconnects
+    res.on('finish', () => cleanup('finish')); // Response completes normally
+    
     stream.on('error', (err) => {
       const duration = Date.now() - startTime;
+      cleanup('error'); // Cleanup on error too
       logger.error('Stream error', { filename, error: err.message, duration: `${duration}ms` });
       if (!res.headersSent) {
         res.status(500).json({ error: 'Stream error' });
@@ -226,8 +239,26 @@ class StreamController {
     });
     stream.pipe(res);
     
+    // Cleanup: Destroy stream when response finishes (covers all cases)
+    const cleanup = (reason) => {
+      if (!stream.destroyed) {
+        const duration = Date.now() - startTime;
+        logger.debug('Partial stream cleanup', { 
+          filename, 
+          range: `${start}-${end}`,
+          reason, 
+          duration: `${duration}ms` 
+        });
+        stream.destroy();
+      }
+    };
+    
+    res.on('close', () => cleanup('close'));   // Client disconnects
+    res.on('finish', () => cleanup('finish')); // Response completes normally
+    
     stream.on('error', (err) => {
       const duration = Date.now() - startTime;
+      cleanup('error'); // Cleanup on error too
       logger.error('Stream error', { 
         filename, 
         range: `${start}-${end}`, 
