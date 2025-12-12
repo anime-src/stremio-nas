@@ -355,22 +355,6 @@ Then update the addon URL in Stremio to: `http://localhost:1223/manifest.json`
 - `lib/utils/helpers.js`: Helper functions (URL construction, title formatting)
 - `lib/utils/consts.js`: Constants (URLs, prefixes)
 
-## Differences from Original Addon
-
-This version differs from the original `stremio-local-addon`:
-
-- **No Filesystem Scanning**: Uses API instead of platform-specific file finders
-- **Periodic Polling**: Automatically updates index from API at configurable intervals
-- **IMDB Filtering**: Only indexes files with IMDB IDs (matching original behavior)
-- **HTTP URLs**: Returns HTTP stream URLs (ID-based) instead of `file://` URLs
-- **Network-Based**: Completely network-based, no local file access
-- **Hybrid Index + On-Demand**: Lightweight in-memory index (~50 bytes/file) with on-demand fetching of full details
-- **LRU Caching**: Caches frequently accessed file details and metadata (1000 items, 30min TTL)
-- **Rich Metadata**: Enhanced stream titles with resolution, codec, source, and file size
-- **Scalable**: Handles 100K+ files with ~5MB memory footprint
-- **Structured Logging**: Winston-based logging instead of console.log
-- **Docker Support**: Can run in Docker/Podman containers
-
 ## License
 
 MIT
