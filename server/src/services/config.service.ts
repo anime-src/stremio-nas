@@ -52,10 +52,8 @@ class ConfigService {
   private _initializeDefaultSettings(): void {
     const defaults: Record<string, string> = {
       logLevel: config.logLevel || 'info',
-      apiHost: config.apiHost || `http://localhost:${config.port}`,
       cacheImdbTTL: String(config.cache.imdbTTL || 86400000),
       cacheMaxSize: String(config.cache.maxSize || 1000),
-      imdbEnabled: config.imdb.enabled !== false ? 'true' : 'false',
       scanOnStartup: config.scanner.onStartup !== false ? 'true' : 'false'
     };
 
@@ -158,10 +156,10 @@ class ConfigService {
   }
 
   /**
-   * Check if IMDB lookup is enabled
+   * Check if IMDB lookup is enabled (always true)
    */
   isImdbEnabled(): boolean {
-    return this.getSetting('imdbEnabled', 'true') === 'true';
+    return true;
   }
 
   /**

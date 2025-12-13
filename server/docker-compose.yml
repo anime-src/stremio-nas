@@ -16,9 +16,6 @@ services:
       # Database configuration
       - DB_PATH=/app/storage/media.db
       
-      # API configuration
-      - API_HOST=http://localhost:3001
-      
       # Scanner configuration
       - SCAN_INTERVAL=*/5 * * * * # Cron expression: every 5 minutes
       - SCAN_ON_STARTUP=true # Run scan on server startup
@@ -27,9 +24,6 @@ services:
       # Cache configuration
       - CACHE_IMDB_TTL=86400000 # IMDB cache TTL in milliseconds (24 hours)
       - CACHE_MAX_SIZE=1000 # Maximum cache entries
-      
-      # IMDB lookup configuration
-      - IMDB_LOOKUP_ENABLED=true # Enable IMDB lookup
       
       # Logging
       - LOG_LEVEL=info

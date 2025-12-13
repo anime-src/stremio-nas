@@ -15,7 +15,7 @@
     class="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4"
   >
     {{ error() }}
-    <button (click)="error.set(null)" class="float-right font-bold">×</button>
+    <button (click)="error.set(null)" class="float-right font-bold cursor-pointer">×</button>
   </div>
 
   <!-- Loading State -->
@@ -48,21 +48,6 @@
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
           Controls the verbosity of server logs
         </p>
-      </div>
-
-      <!-- API Host -->
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
-          >API Host</label
-        >
-        <input
-          type="text"
-          [ngModel]="getSetting('apiHost')"
-          (ngModelChange)="setSetting('apiHost', $event)"
-          name="apiHost"
-          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Base URL for API requests</p>
       </div>
 
       <!-- Cache IMDB TTL -->
@@ -99,27 +84,6 @@
         </p>
       </div>
 
-      <!-- IMDB Enabled -->
-      <div>
-        <label class="flex items-center">
-          <input
-            type="checkbox"
-            [ngModel]="getSetting('imdbEnabled')"
-            (ngModelChange)="setSetting('imdbEnabled', $event)"
-            name="imdbEnabled"
-            [checked]="getSetting('imdbEnabled') === 'true'"
-            (change)="setSetting('imdbEnabled', $any($event.target).checked ? 'true' : 'false')"
-            class="mr-2"
-          />
-          <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
-            >IMDB Lookup Enabled</span
-          >
-        </label>
-        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 ml-6">
-          Enable automatic IMDB metadata lookup for files
-        </p>
-      </div>
-
       <!-- Scan on Startup -->
       <div>
         <label class="flex items-center">
@@ -144,7 +108,7 @@
         <button
           type="submit"
           [disabled]="saving()"
-          class="px-6 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-6 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-md hover:bg-indigo-700 dark:hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         >
           {{ saving() ? 'Saving...' : 'Save Settings' }}
         </button>

@@ -1,5 +1,4 @@
 import swaggerJsdoc from 'swagger-jsdoc';
-import config from './index';
 
 const options = {
   definition: {
@@ -12,12 +11,6 @@ const options = {
         name: 'API Support',
       },
     },
-    servers: [
-      {
-        url: config.apiHost,
-        description: 'API server',
-      },
-    ],
     components: {
       schemas: {
         File: {

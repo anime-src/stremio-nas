@@ -6,7 +6,6 @@ export interface Config {
   host: string;
   mediaDir: string;
   allowedExtensions: string[];
-  apiHost: string;
   cache: {
     imdbTTL: number;
     maxSize: number;
@@ -38,9 +37,6 @@ const config: Config = {
     .split(',')
     .map(ext => ext.trim().toLowerCase()),
   
-  // API configuration
-  apiHost: process.env.API_HOST || `http://localhost:${process.env.PORT || 3000}`,
-  
   // Cache configuration (for IMDB lookups)
   cache: {
     imdbTTL: parseInt(process.env.CACHE_IMDB_TTL || '86400000', 10), // 24 hours in ms
@@ -65,9 +61,9 @@ const config: Config = {
   // Logging configuration
   logLevel: process.env.LOG_LEVEL || 'info',
   
-  // IMDB lookup configuration
+  // IMDB lookup configuration (always enabled)
   imdb: {
-    enabled: process.env.IMDB_LOOKUP_ENABLED !== 'false', // Enabled by default
+    enabled: true,
     interestingTypes: ['movie', 'series']
   }
 };

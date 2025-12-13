@@ -28,9 +28,6 @@ services:
       - CACHE_IMDB_TTL=86400000 # IMDB cache TTL in milliseconds (24 hours)
       - CACHE_MAX_SIZE=1000 # Maximum cache entries
       
-      # IMDB lookup configuration
-      - IMDB_LOOKUP_ENABLED=true # Enable IMDB lookup
-      
       # Logging
       - LOG_LEVEL=info # Options: error, warn, info, debug
     volumes:
