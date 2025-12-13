@@ -1,27 +1,41 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
-const logger = require('../config/logger');
+import Database from 'better-sqlite3';
+import path from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import logger from '../config/logger';
+import config from '../config';
+import { FileRecord, DatabaseStats, ScanRecord, PreparedStatements } from '../types/database';
 
 /**
  * Database service using better-sqlite3 for persistent storage
  */
 class DatabaseService {
+  private db: Database.Database;
+  private stmts!: PreparedStatements;
+
   constructor() {
+    // Use DB_PATH from config (can be absolute or relative)
+    const dbPath = config.database.path;
+    
+    // If path is relative, resolve it relative to project root
+    const resolvedDbPath = path.isAbsolute(dbPath) 
+      ? dbPath 
+      : path.resolve(process.cwd(), dbPath);
+    
     // Ensure storage directory exists
-    const storageDir = path.join(__dirname, '../../storage');
-    if (!fs.existsSync(storageDir)) {
-      fs.mkdirSync(storageDir, { recursive: true });
+    const storageDir = path.dirname(resolvedDbPath);
+    if (!existsSync(storageDir)) {
+      mkdirSync(storageDir, { recursive: true });
+      logger.info('Created storage directory', { path: storageDir });
     }
 
-    const dbPath = path.join(storageDir, 'media.db');
-    this.db = new Database(dbPath);
+    this.db = new Database(resolvedDbPath);
     this.db.pragma('journal_mode = WAL'); // Better performance
     
+    logger.info('Database initialized', { path: resolvedDbPath });
     this.initialize();
   }
 
-  initialize() {
+  private initialize(): void {
     // Create files table with metadata columns
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS files (
@@ -83,7 +97,7 @@ class DatabaseService {
       this.db.exec(`ALTER TABLE scans ADD COLUMN processedCount INTEGER DEFAULT 0`);
       this.db.exec(`ALTER TABLE scans ADD COLUMN skippedCount INTEGER DEFAULT 0`);
       logger.info('Added processedCount and skippedCount columns to scans table');
-    } catch (e) {
+    } catch (e: any) {
       // Columns already exist, ignore
       if (!e.message.includes('duplicate column')) {
         logger.warn('Error adding scan statistics columns', { error: e.message });
@@ -121,51 +135,51 @@ class DatabaseService {
           starring = @starring,
           similarity = @similarity,
           updatedAt = CURRENT_TIMESTAMP
-      `),
-      getAllFiles: this.db.prepare('SELECT * FROM files ORDER BY name'),
-      getFileById: this.db.prepare('SELECT * FROM files WHERE id = ?'),
-      getFileByPath: this.db.prepare('SELECT * FROM files WHERE path = ?'),
-      getFilesByImdb: this.db.prepare('SELECT * FROM files WHERE imdb_id = ?'),
-      deleteFile: this.db.prepare('DELETE FROM files WHERE path = ?'),
-      clearFiles: this.db.prepare('DELETE FROM files'),
+      `) as Database.Statement<FileRecord>,
+      getAllFiles: this.db.prepare('SELECT * FROM files ORDER BY name') as Database.Statement<[]>,
+      getFileById: this.db.prepare('SELECT * FROM files WHERE id = ?') as Database.Statement<[number]>,
+      getFileByPath: this.db.prepare('SELECT * FROM files WHERE path = ?') as Database.Statement<[string]>,
+      getFilesByImdb: this.db.prepare('SELECT * FROM files WHERE imdb_id = ?') as Database.Statement<[string]>,
+      deleteFile: this.db.prepare('DELETE FROM files WHERE path = ?') as Database.Statement<[string]>,
+      clearFiles: this.db.prepare('DELETE FROM files') as Database.Statement<[]>,
       searchFiles: this.db.prepare(`
         SELECT * FROM files 
         WHERE name LIKE ? OR parsedName LIKE ?
         ORDER BY name
-      `),
+      `) as Database.Statement<[string, string]>,
       filterByExtension: this.db.prepare(`
         SELECT * FROM files 
         WHERE name LIKE ?
         ORDER BY name
-      `),
+      `) as Database.Statement<[string]>,
       insertScan: this.db.prepare(`
         INSERT INTO scans (filesFound, duration, errors, processedCount, skippedCount)
         VALUES (?, ?, ?, ?, ?)
-      `),
+      `) as Database.Statement<[number, number, number, number, number]>,
       getScanHistory: this.db.prepare(`
         SELECT * FROM scans 
         ORDER BY timestamp DESC 
         LIMIT ?
-      `),
+      `) as Database.Statement<[number]>,
       getStats: this.db.prepare(`
         SELECT 
           COUNT(*) as totalFiles,
           COUNT(DISTINCT imdb_id) as uniqueImdb,
           SUM(size) as totalSize
         FROM files
-      `),
+      `) as Database.Statement<[]>,
       getTypeStats: this.db.prepare(`
         SELECT type, COUNT(*) as count 
         FROM files 
         GROUP BY type
-      `)
+      `) as Database.Statement<[]>
     };
 
     // Add mtime column if it doesn't exist (migration for existing databases)
     try {
       this.db.exec(`ALTER TABLE files ADD COLUMN mtime INTEGER DEFAULT 0`);
       logger.info('Added mtime column to files table');
-    } catch (e) {
+    } catch (e: any) {
       // Column already exists, ignore
       if (!e.message.includes('duplicate column')) {
         logger.warn('Error adding mtime column', { error: e.message });
@@ -177,42 +191,53 @@ class DatabaseService {
       // SQLite doesn't support DROP COLUMN directly, so we'll just ignore it
       // The column will remain but won't be used
       logger.info('URL column migration: column will be ignored if present');
-    } catch (e) {
+    } catch (e: any) {
       logger.warn('Error during URL column migration', { error: e.message });
     }
 
-    const count = this.db.prepare('SELECT COUNT(*) as count FROM files').get();
-    logger.info('Database initialized', { fileCount: count.count });
+    const count = this.db.prepare('SELECT COUNT(*) as count FROM files').get() as { count: number };
+    logger.info('Database tables initialized', { fileCount: count.count });
   }
 
   /**
    * Upsert a single file
    */
-  upsertFile(fileData) {
-    return this.stmts.insertFile.run(fileData);
+  upsertFile(fileData: FileRecord): Database.RunResult {
+    // Convert arrays to JSON strings for storage
+    const data: any = { ...fileData };
+    if (Array.isArray(data.languages)) {
+      data.languages = JSON.stringify(data.languages);
+    }
+    if (Array.isArray(data.flags)) {
+      data.flags = JSON.stringify(data.flags);
+    }
+    if (typeof data.image === 'object' && data.image !== null) {
+      data.image = JSON.stringify(data.image);
+    }
+    return this.stmts.insertFile.run(data);
   }
 
   /**
    * Batch upsert files (uses transaction for speed)
    */
-  upsertFilesBatch(files) {
-    const insert = this.db.transaction((files) => {
+  upsertFilesBatch(files: FileRecord[]): void {
+    const insert = this.db.transaction((files: FileRecord[]) => {
       for (const file of files) {
-        this.stmts.insertFile.run(file);
+        this.upsertFile(file);
       }
     });
     
-    return insert(files);
+    insert(files);
   }
 
   /**
    * Parse JSON strings in file row to objects/arrays
    * @private
    */
-  _parseFileRow(row) {
+  private _parseFileRow(row: any): FileRecord | null {
     if (!row) return row;
     
-    const parsed = { ...row };
+    const parsed: FileRecord = { ...row };
     
     // Parse JSON strings to objects/arrays
     if (parsed.languages && typeof parsed.languages === 'string') {
@@ -248,14 +273,14 @@ class DatabaseService {
   /**
    * Get all files
    */
-  getAllFiles() {
-    return this.stmts.getAllFiles.all().map(row => this._parseFileRow(row));
+  getAllFiles(): FileRecord[] {
+    return this.stmts.getAllFiles.all().map((row: any) => this._parseFileRow(row)!).filter(Boolean);
   }
 
   /**
    * Get file by ID
    */
-  getFileById(fileId) {
+  getFileById(fileId: number): FileRecord | null {
     const row = this.stmts.getFileById.get(fileId);
     return this._parseFileRow(row);
   }
@@ -263,7 +288,7 @@ class DatabaseService {
   /**
    * Get file by path
    */
-  getFileByPath(filePath) {
+  getFileByPath(filePath: string): FileRecord | null {
     const row = this.stmts.getFileByPath.get(filePath);
     return this._parseFileRow(row);
   }
@@ -271,45 +296,45 @@ class DatabaseService {
   /**
    * Get files by IMDB ID
    */
-  getFilesByImdb(imdbId) {
-    return this.stmts.getFilesByImdb.all(imdbId).map(row => this._parseFileRow(row));
+  getFilesByImdb(imdbId: string): FileRecord[] {
+    return this.stmts.getFilesByImdb.all(imdbId).map((row: any) => this._parseFileRow(row)!).filter(Boolean);
   }
 
   /**
    * Search files by name
    */
-  searchFiles(query) {
+  searchFiles(query: string): FileRecord[] {
     const pattern = `%${query}%`;
-    return this.stmts.searchFiles.all(pattern, pattern).map(row => this._parseFileRow(row));
+    return this.stmts.searchFiles.all(pattern, pattern).map((row: any) => this._parseFileRow(row)!).filter(Boolean);
   }
 
   /**
    * Filter files by extension
    */
-  filterByExtension(ext) {
+  filterByExtension(ext: string): FileRecord[] {
     const pattern = `%${ext}`;
-    return this.stmts.filterByExtension.all(pattern).map(row => this._parseFileRow(row));
+    return this.stmts.filterByExtension.all(pattern).map((row: any) => this._parseFileRow(row)!).filter(Boolean);
   }
 
   /**
    * Get files by IMDB ID
    */
-  getFilesByImdbId(imdbId) {
-    return this.stmts.getFilesByImdb.all(imdbId).map(row => this._parseFileRow(row));
+  getFilesByImdbId(imdbId: string): FileRecord[] {
+    return this.stmts.getFilesByImdb.all(imdbId).map((row: any) => this._parseFileRow(row)!).filter(Boolean);
   }
 
   /**
    * Search files by name (case-insensitive partial match)
    */
-  searchFilesByName(namePattern) {
+  searchFilesByName(namePattern: string): FileRecord[] {
     const pattern = `%${namePattern}%`;
-    return this.stmts.searchFiles.all(pattern, pattern).map(row => this._parseFileRow(row));
+    return this.stmts.searchFiles.all(pattern, pattern).map((row: any) => this._parseFileRow(row)!).filter(Boolean);
   }
 
   /**
    * Record a scan to history
    */
-  recordScan(stats) {
+  recordScan(stats: { filesFound: number; duration: number; errors?: number; processedCount?: number; skippedCount?: number }): Database.RunResult {
     return this.stmts.insertScan.run(
       stats.filesFound,
       stats.duration,
@@ -322,14 +347,14 @@ class DatabaseService {
   /**
    * Get scan history
    */
-  getScanHistory(limit = 10) {
-    return this.stmts.getScanHistory.all(limit);
+  getScanHistory(limit: number = 10): ScanRecord[] {
+    return this.stmts.getScanHistory.all(limit) as ScanRecord[];
   }
 
   /**
    * Remove a file from database
    */
-  removeFile(filePath) {
+  removeFile(filePath: string): boolean {
     const result = this.stmts.deleteFile.run(filePath);
     return result.changes > 0;
   }
@@ -338,7 +363,7 @@ class DatabaseService {
    * Remove files that are not in the provided list of paths
    * Used to sync database with filesystem after scanning
    */
-  removeFilesNotInList(paths) {
+  removeFilesNotInList(paths: string[]): number {
     if (paths.length === 0) {
       // If no files found, clear everything
       const result = this.stmts.clearFiles.run();
@@ -358,17 +383,17 @@ class DatabaseService {
   /**
    * Clear all files (use with caution)
    */
-  clearFiles() {
+  clearFiles(): Database.RunResult {
     return this.stmts.clearFiles.run();
   }
 
   /**
    * Get database statistics
    */
-  getStats() {
-    const stats = this.stmts.getStats.get();
-    const typeStats = this.stmts.getTypeStats.all();
-    const scanHistory = this.stmts.getScanHistory.all(1);
+  getStats(): DatabaseStats {
+    const stats = this.stmts.getStats.get() as { totalFiles: number; uniqueImdb: number; totalSize: number };
+    const typeStats = this.stmts.getTypeStats.all() as Array<{ type: string | null; count: number }>;
+    const scanHistory = this.stmts.getScanHistory.all(1) as ScanRecord[];
 
     return {
       totalFiles: stats.totalFiles,
@@ -377,7 +402,7 @@ class DatabaseService {
       byType: typeStats.reduce((acc, row) => {
         acc[row.type || 'unknown'] = row.count;
         return acc;
-      }, {}),
+      }, {} as Record<string, number>),
       lastScan: scanHistory[0] || null
     };
   }
@@ -385,10 +410,9 @@ class DatabaseService {
   /**
    * Close database connection
    */
-  close() {
+  close(): void {
     this.db.close();
   }
 }
 
-module.exports = new DatabaseService();
-
+export default new DatabaseService();

@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const filesRoutes = require('./files.routes');
-const streamRoutes = require('./stream.routes');
+import { Router } from 'express';
+import filesRoutes from './files.routes';
+import streamRoutes from './stream.routes';
 
 /**
  * Main router - aggregates all route modules
  */
+
+const router = Router();
 
 /**
  * @swagger
@@ -25,7 +26,7 @@ const streamRoutes = require('./stream.routes');
  *               status: ok
  *               timestamp: "2024-01-01T00:00:00.000Z"
  */
-router.get('/health', (req, res) => {
+router.get('/health', (_req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString() 
@@ -36,5 +37,4 @@ router.get('/health', (req, res) => {
 router.use('/files', filesRoutes);
 router.use('/stream', streamRoutes);
 
-module.exports = router;
-
+export default router;

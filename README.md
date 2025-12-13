@@ -2,7 +2,7 @@
 
 A complete solution for streaming video files from a NAS/media server to Stremio without direct filesystem access. The system consists of two components:
 
-1. **Stremio NAS API** - A Node.js Express API server with SQLite database, automatic file scanning, and metadata extraction
+1. **Stremio NAS API** - A TypeScript/Node.js Express API server with SQLite database, automatic file scanning, and metadata extraction
 2. **Stremio NAS Add-on** - A Stremio add-on that connects to the API to list and stream videos with rich metadata
 
 ## Architecture
@@ -113,15 +113,19 @@ npm start
 
 ```
 stremio-network-addon/
-├── server/                 # Stremio NAS API Server
-│   ├── index.js           # Entry point
-│   ├── src/               # Source code
-│   │   ├── app.js        # Express app setup
+├── server/                 # Stremio NAS API Server (TypeScript)
+│   ├── index.ts           # Entry point
+│   ├── tsconfig.json      # TypeScript configuration
+│   ├── src/               # TypeScript source code
+│   │   ├── app.ts        # Express app setup
 │   │   ├── config/       # Configuration
 │   │   ├── controllers/  # Request handlers
 │   │   ├── services/     # Business logic (scanner, database, IMDB)
 │   │   ├── routes/       # API routes
-│   │   └── middleware/   # Express middleware
+│   │   ├── middleware/   # Express middleware
+│   │   ├── types/        # TypeScript type definitions
+│   │   └── utils/        # Utility functions
+│   ├── dist/              # Compiled JavaScript (generated)
 │   ├── Dockerfile         # Docker image definition
 │   ├── docker-compose.yml # Server deployment config
 │   └── README.md          # API documentation
@@ -145,6 +149,7 @@ stremio-network-addon/
 ## Requirements
 
 - Docker and Docker Compose (or Podman Compose)
+- Node.js 20+ (for server development, optional if using Docker)
 - Node.js 14+ (for add-on if running locally, optional if using Docker)
 - Stremio desktop application
 - Video files accessible to Docker
@@ -239,8 +244,9 @@ curl http://localhost:1222/catalog/movie/api.json
   - Verify Docker permissions
   - Check storage directory permissions
 - **Database issues**: 
-  - Database stored at `./storage/media.db` inside container
-  - Ensure `node` user has write access
+  - Database stored in Docker volume `stremio-nas-db` at `/app/storage/media.db` inside container
+  - Storage directory is automatically created with correct permissions
+  - To reset: `docker compose down -v` (removes volume)
 
 ### Add-on Issues
 
@@ -273,8 +279,8 @@ See individual README files for detailed troubleshooting:
 - API container runs as non-root user (`node`)
 - Volume mounts are read-only (`:ro`)
 - ID-based streaming URLs prevent path traversal attacks
-- Database stored inside container (not exposed externally)
-- CORS can be restricted if needed (modify `server/src/app.js`)
+- Database stored in Docker volume (not exposed externally)
+- CORS can be restricted if needed (modify `server/src/app.ts`)
 
 ## License
 

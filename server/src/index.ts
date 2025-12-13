@@ -1,14 +1,15 @@
-const createApp = require('./app');
-const config = require('./config');
-const logger = require('./config/logger');
-const scheduler = require('./services/scheduler.service');
-const fileScannerService = require('./services/fileScanner.service');
-const db = require('./services/database.service');
+import createApp from './app';
+import config from './config';
+import logger from './config/logger';
+import scheduler from './services/scheduler.service';
+import fileScannerService from './services/file-scanner.service';
+import db from './services/database.service';
+import { Server } from 'http';
 
 /**
  * Server entry point
  */
-async function startServer() {
+async function startServer(): Promise<Server> {
   const app = createApp();
 
   // Initial scan on startup (optional)
@@ -16,7 +17,7 @@ async function startServer() {
     logger.info('Running initial file scan...');
     try {
       await fileScannerService.scan();
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Initial file scan failed', { error: error.message });
     }
   }
@@ -78,5 +79,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = startServer;
-
+export default startServer;

@@ -1,9 +1,34 @@
-const fs = require('fs').promises;
-const path = require('path');
-const config = require('../config');
-const logger = require('../config/logger');
-const imdbService = require('./imdb.service');
-const db = require('./database.service');
+import { promises as fs } from 'fs';
+import path from 'path';
+import config from '../config';
+import logger from '../config/logger';
+import imdbService from './imdb.service';
+import db from './database.service';
+import { FileRecord } from '../types/database';
+
+interface RawFile {
+  name: string;
+  path: string;
+  fullPath: string;
+  size: number;
+  mtime: number;
+  ext: string;
+}
+
+interface ProcessResult {
+  filesToUpdate: FileRecord[];
+  processedCount: number;
+  skippedCount: number;
+}
+
+interface ScanResult {
+  success: boolean;
+  filesFound: number;
+  processedCount: number;
+  skippedCount: number;
+  removedCount: number;
+  duration: number;
+}
 
 /**
  * File scanner service with database persistence
@@ -12,9 +37,9 @@ class FileScannerService {
   /**
    * Scan filesystem and sync with database
    * This is the main method that should be called for scanning
-   * @returns {Promise<Object>} Scan results
+   * @returns Scan results
    */
-  async scan() {
+  async scan(): Promise<ScanResult> {
     logger.info('Starting filesystem scan', { mediaDir: config.mediaDir });
     const startTime = Date.now();
     
@@ -67,7 +92,7 @@ class FileScannerService {
         removedCount,
         duration
       };
-    } catch (error) {
+    } catch (error: any) {
       const duration = Date.now() - startTime;
       
       logger.error('Filesystem scan failed', {
@@ -92,8 +117,8 @@ class FileScannerService {
    * Returns raw file stats without any processing
    * @private
    */
-  async _scanDirectory(dirPath, basePath = '') {
-    const rawFiles = [];
+  private async _scanDirectory(dirPath: string, basePath: string = ''): Promise<RawFile[]> {
+    const rawFiles: RawFile[] = [];
     
     try {
       const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -128,13 +153,13 @@ class FileScannerService {
                 mtime: stats.mtime.getTime(),
                 ext: ext
               });
-            } catch (err) {
+            } catch (err: any) {
               logger.warn('Error reading file', { path: fullPath, error: err.message });
             }
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Error scanning directory', { directory: dirPath, error: err.message });
     }
     
@@ -146,8 +171,8 @@ class FileScannerService {
    * Returns only files that need database updates
    * @private
    */
-  async _processFiles(rawFiles) {
-    const filesToUpdate = []; // Only files that need DB updates
+  private async _processFiles(rawFiles: RawFile[]): Promise<ProcessResult> {
+    const filesToUpdate: FileRecord[] = []; // Only files that need DB updates
     let processedCount = 0;
     let skippedCount = 0;
     
@@ -180,7 +205,7 @@ class FileScannerService {
       
       if (imdbInfo.imdb_id) {
         // Build file info object (id will be set by database auto-increment)
-        const fileInfo = {
+        const fileInfo: FileRecord = {
           name: rawFile.name,
           path: rawFile.path,
           size: rawFile.size,
@@ -230,7 +255,7 @@ class FileScannerService {
    * Check if file should be skipped (incomplete/downloading)
    * @private
    */
-  _shouldSkipFile(fileName, stats) {
+  private _shouldSkipFile(fileName: string, stats: import('fs').Stats): boolean {
     const tempExtensions = config.scanner.temporaryExtensions;
     if (tempExtensions.some(ext => fileName.toLowerCase().endsWith(ext))) {
       logger.debug('Skipping temporary file', { fileName });
@@ -251,8 +276,6 @@ class FileScannerService {
 
     return false;
   }
-
 }
 
-module.exports = new FileScannerService();
-
+export default new FileScannerService();

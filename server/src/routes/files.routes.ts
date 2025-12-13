@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const filesController = require('../controllers/files.controller');
-const { validateExtension, validateImdbId, validateFileName } = require('../middleware/validators');
+import { Router } from 'express';
+import filesController from '../controllers/files.controller';
+import { validateExtension, validateImdbId, validateFileName } from '../middleware/validators';
 
 /**
  * File listing routes
  */
+
+const router = Router();
 
 /**
  * @swagger
@@ -119,8 +120,8 @@ router.post('/refresh', (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/stats', (req, res, next) => {
-  filesController.getStats(req, res, next);
+router.get('/stats', (req, res) => {
+  filesController.getStats(req, res);
 });
 
 /**
@@ -151,9 +152,8 @@ router.get('/stats', (req, res, next) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/scan-history', (req, res, next) => {
-  filesController.getScanHistory(req, res, next);
+router.get('/scan-history', (req, res) => {
+  filesController.getScanHistory(req, res);
 });
 
-module.exports = router;
-
+export default router;

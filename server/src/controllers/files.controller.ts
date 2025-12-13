@@ -1,9 +1,8 @@
-const path = require('path');
-const db = require('../services/database.service');
-const scheduler = require('../services/scheduler.service');
-const logger = require('../config/logger');
-const { ApiError } = require('../middleware/errorHandler');
-const config = require('../config');
+import { Request, Response, NextFunction } from 'express';
+import db from '../services/database.service';
+import scheduler from '../services/scheduler.service';
+import logger from '../config/logger';
+import config from '../config';
 
 /**
  * Controller for file listing operations
@@ -13,7 +12,7 @@ class FilesController {
    * List all video files
    * @route GET /files
    */
-  async listFiles(req, res, next) {
+  async listFiles(req: Request, res: Response, next: NextFunction): Promise<void> {
     const startTime = Date.now();
     
     try {
@@ -59,7 +58,7 @@ class FilesController {
       });
       
       res.json(files);
-    } catch (err) {
+    } catch (err: any) {
       const duration = Date.now() - startTime;
       logger.error('Error listing files', { 
         error: err.message, 
@@ -74,7 +73,7 @@ class FilesController {
    * Trigger manual file scan
    * @route POST /files/refresh
    */
-  async refreshCache(req, res, next) {
+  async refreshCache(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       // Trigger scan through scheduler (includes isScanning check and proper error handling)
       const result = await scheduler.triggerScan();
@@ -90,12 +89,13 @@ class FilesController {
         duration: result.duration,
         scanCompleted: new Date().toISOString()
       });
-    } catch (err) {
+    } catch (err: any) {
       if (err.message === 'Scan already in progress') {
-        return res.status(409).json({ 
+        res.status(409).json({ 
           error: 'Scan already in progress',
           message: 'A file scan is currently running. Please wait for it to complete.'
         });
+        return;
       }
       logger.error('Error during manual scan', { error: err.message });
       next(err);
@@ -106,7 +106,7 @@ class FilesController {
    * Get database statistics
    * @route GET /files/stats
    */
-  getStats(req, res) {
+  getStats(_req: Request, res: Response): void {
     try {
       const stats = db.getStats();
       const schedulerStatus = scheduler.getStatus();
@@ -119,7 +119,7 @@ class FilesController {
           scanOnStartup: config.scanner.onStartup
         }
       });
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Error getting stats', { error: err.message });
       res.status(500).json({ error: 'Failed to get statistics' });
     }
@@ -129,18 +129,17 @@ class FilesController {
    * Get scan history
    * @route GET /files/scan-history
    */
-  getScanHistory(req, res) {
+  getScanHistory(req: Request, res: Response): void {
     try {
-      const limit = parseInt(req.query.limit, 10) || 10;
+      const limit = parseInt(req.query.limit as string, 10) || 10;
       const history = db.getScanHistory(limit);
       
       res.json({ history });
-    } catch (err) {
+    } catch (err: any) {
       logger.error('Error getting scan history', { error: err.message });
       res.status(500).json({ error: 'Failed to get scan history' });
     }
   }
 }
 
-module.exports = new FilesController();
-
+export default new FilesController();

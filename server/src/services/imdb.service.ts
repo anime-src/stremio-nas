@@ -1,18 +1,52 @@
-const nameToImdb = require('name-to-imdb');
-const { filenameParse } = require('@ctrl/video-filename-parser');
-const config = require('../config');
-const logger = require('../config/logger');
-const cache = require('./cache.service');
+import nameToImdb from 'name-to-imdb';
+import { filenameParse } from '@ctrl/video-filename-parser';
+import config from '../config';
+import logger from '../config/logger';
+import cache from './cache.service';
 
 // oleoo is an ES module, need to use dynamic import
-let oleoo = null;
+let oleoo: any = null;
 (async () => {
   try {
     oleoo = (await import('oleoo')).default;
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Failed to load oleoo module', { error: error.message });
   }
 })();
+
+interface ImdbMetadata {
+  imdbName?: string;
+  imdbYear?: number;
+  imdbType?: string;
+  yearRange?: string;
+  image?: object | null;
+  starring?: string;
+  similarity?: number;
+}
+
+interface ProcessedFileInfo {
+  parsedName: string;
+  type: string;
+  imdb_id: string | null;
+  season: number | null;
+  episode: number | null;
+  resolution: string | null;
+  source: string | null;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  audioChannels: string | null;
+  languages: string | null;
+  releaseGroup: string | null;
+  flags: string | null;
+  edition: string | null;
+  imdbName?: string | null;
+  imdbYear?: number | null;
+  imdbType?: string | null;
+  yearRange?: string | null;
+  image?: string | null;
+  starring?: string | null;
+  similarity?: number | null;
+}
 
 /**
  * IMDB lookup service with caching
@@ -20,12 +54,12 @@ let oleoo = null;
 class ImdbService {
   /**
    * Parse filename and get IMDB ID
-   * @param {string} filePath - Full file path
-   * @param {string} fileName - File name
-   * @param {number} fileSize - File size in bytes
-   * @returns {Promise<Object>} Parsed video information
+   * @param filePath - Full file path
+   * @param fileName - File name
+   * @param fileSize - File size in bytes
+   * @returns Parsed video information
    */
-  async processFile(filePath, fileName, fileSize) {
+  async processFile(_filePath: string, fileName: string, _fileSize: number): Promise<ProcessedFileInfo> {
     // Check cache first
     const cacheKey = `imdb:${fileName}`;
     const cached = cache.get(cacheKey, config.cache.imdbTTL);
@@ -56,8 +90,9 @@ class ImdbService {
       const type = isTv ? 'series' : 'movie';
       
       // Extract season/episode info (prefer oleoo for accuracy)
-      const season = oleooResult.season || (parsed.seasons && parsed.seasons.length > 0 ? parsed.seasons[0] : null);
-      const episode = oleooResult.episode ? parseInt(oleooResult.episode, 10) : (parsed.episodes && parsed.episodes.length > 0 ? parsed.episodes[0] : null);
+      const parsedAny = parsed as any; // Type assertion for dynamic properties
+      const season = oleooResult.season || (parsedAny.seasons && parsedAny.seasons.length > 0 ? parsedAny.seasons[0] : null);
+      const episode = oleooResult.episode ? parseInt(oleooResult.episode, 10) : (parsedAny.episodes && parsedAny.episodes.length > 0 ? parsedAny.episodes[0] : null);
       
       // Extract title and year (prefer ctrl parser for clean title)
       const title = parsed.title || oleooResult.title || fileName;
@@ -79,7 +114,7 @@ class ImdbService {
 
       // Only process movies and series
       if (!config.imdb.interestingTypes.includes(type)) {
-        const result = {
+        const result: ProcessedFileInfo = {
           parsedName: title,
           type: type,
           imdb_id: null,
@@ -94,7 +129,7 @@ class ImdbService {
       // Look up IMDB ID and metadata
       const { imdbId, metadata: imdbMetadata } = await this._lookupImdb(title, year, type);
       
-      const result = {
+      const result: ProcessedFileInfo = {
         parsedName: title,
         type: type,
         imdb_id: imdbId || null,
@@ -117,7 +152,7 @@ class ImdbService {
       cache.set(cacheKey, result);
       
       return result;
-    } catch (error) {
+    } catch (error: any) {
       logger.warn('Error processing file for IMDB', { 
         fileName, 
         error: error.message,
@@ -148,7 +183,17 @@ class ImdbService {
    * Merge metadata from both parsers
    * @private
    */
-  _mergeMetadata(oleooResult, ctrlParsed) {
+  private _mergeMetadata(oleooResult: any, ctrlParsed: any): {
+    resolution: string | null;
+    source: string | null;
+    videoCodec: string | null;
+    audioCodec: string | null;
+    audioChannels: string | null;
+    languages: string | null;
+    releaseGroup: string | null;
+    flags: string | null;
+    edition: string | null;
+  } {
     // Resolution: Prefer @ctrl parser (more detailed), fallback to oleoo
     const resolution = ctrlParsed.resolution || oleooResult.resolution || null;
     
@@ -194,15 +239,15 @@ class ImdbService {
    * Merge language arrays from both parsers
    * @private
    */
-  _mergeLanguages(oleooLangs, ctrlLangs) {
-    const merged = new Set();
+  private _mergeLanguages(oleooLangs: string[] | undefined, ctrlLangs: any[] | undefined): string[] {
+    const merged = new Set<string>();
     
     if (oleooLangs && Array.isArray(oleooLangs)) {
       oleooLangs.forEach(lang => merged.add(lang));
     }
     
     if (ctrlLangs && Array.isArray(ctrlLangs)) {
-      ctrlLangs.forEach(lang => {
+      ctrlLangs.forEach((lang: any) => {
         // ctrl parser returns Language objects, extract code
         const langCode = typeof lang === 'string' ? lang : lang.code || lang.name;
         if (langCode) merged.add(langCode);
@@ -216,8 +261,8 @@ class ImdbService {
    * Merge flags from both parsers
    * @private
    */
-  _mergeFlags(oleooFlags, ctrlRevision, ctrlEdition) {
-    const flags = new Set();
+  private _mergeFlags(oleooFlags: string[] | undefined, ctrlRevision: any, ctrlEdition: any): string[] {
+    const flags = new Set<string>();
     
     if (oleooFlags && Array.isArray(oleooFlags)) {
       oleooFlags.forEach(flag => flags.add(flag));
@@ -241,13 +286,13 @@ class ImdbService {
    * Returns both IMDB ID and metadata
    * @private
    */
-  _lookupImdb(name, year, type) {
+  private _lookupImdb(name: string, year: number | null, type: string): Promise<{ imdbId: string | null; metadata: ImdbMetadata | null }> {
     return new Promise((resolve) => {
       nameToImdb({
         name,
-        year,
+        year: year || undefined,
         type,
-      }, (err, imdbId, inf) => {
+      }, (err: Error | null, imdbId: string | null, inf: any) => {
         if (err) {
           logger.debug('IMDB lookup failed', { name, year, type, error: err.message });
           resolve({ imdbId: null, metadata: null });
@@ -260,7 +305,7 @@ class ImdbService {
           });
           
           // Extract useful metadata from inf.meta
-          const metadata = inf?.meta ? {
+          const metadata: ImdbMetadata | null = inf?.meta ? {
             imdbName: inf.meta.name,
             imdbYear: inf.meta.year,
             imdbType: inf.meta.type,
@@ -277,5 +322,4 @@ class ImdbService {
   }
 }
 
-module.exports = new ImdbService();
-
+export default new ImdbService();

@@ -1,4 +1,4 @@
-const winston = require('winston');
+import winston from 'winston';
 
 /**
  * Configure Winston logger with consistent formatting
@@ -29,5 +29,4 @@ const logger = winston.createLogger({
   ]
 });
 
-module.exports = logger;
-
+export default logger;

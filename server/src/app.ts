@@ -1,17 +1,17 @@
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
-const swaggerUi = require('swagger-ui-express');
-const swaggerSpec = require('./config/swagger');
-const logger = require('./config/logger');
-const routes = require('./routes');
-const { errorHandler } = require('./middleware/errorHandler');
-const requestLogger = require('./middleware/requestLogger');
+import express, { Express } from 'express';
+import cors from 'cors';
+import morgan from 'morgan';
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './config/swagger';
+import logger from './config/logger';
+import routes from './routes';
+import { errorHandler } from './middleware/error-handler';
+import requestLogger from './middleware/request-logger';
 
 /**
  * Express application setup
  */
-function createApp() {
+function createApp(): Express {
   const app = express();
 
   // Basic middleware
@@ -21,7 +21,7 @@ function createApp() {
   // Morgan HTTP logger (integrate with Winston)
   app.use(morgan('combined', {
     stream: {
-      write: (message) => logger.info(message.trim())
+      write: (message: string) => logger.info(message.trim())
     }
   }));
 
@@ -43,5 +43,4 @@ function createApp() {
   return app;
 }
 
-module.exports = createApp;
-
+export default createApp;

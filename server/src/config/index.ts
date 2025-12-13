@@ -1,9 +1,35 @@
 /**
  * Central configuration for the media API server
  */
-const config = {
+export interface Config {
+  port: number;
+  host: string;
+  mediaDir: string;
+  allowedExtensions: string[];
+  apiHost: string;
+  cache: {
+    imdbTTL: number;
+    maxSize: number;
+  };
+  scanner: {
+    interval: string;
+    onStartup: boolean;
+    minVideoSizeMB: number;
+    temporaryExtensions: string[];
+  };
+  database: {
+    path: string;
+  };
+  logLevel: string;
+  imdb: {
+    enabled: boolean;
+    interestingTypes: string[];
+  };
+}
+
+const config: Config = {
   // Server configuration
-  port: parseInt(process.env.PORT, 10) || 3000,
+  port: parseInt(process.env.PORT || '3000', 10),
   host: '0.0.0.0',
   
   // Media directory configuration
@@ -17,15 +43,15 @@ const config = {
   
   // Cache configuration (for IMDB lookups)
   cache: {
-    imdbTTL: parseInt(process.env.CACHE_IMDB_TTL, 10) || 86400000, // 24 hours in ms
-    maxSize: parseInt(process.env.CACHE_MAX_SIZE, 10) || 1000 // Maximum cache entries
+    imdbTTL: parseInt(process.env.CACHE_IMDB_TTL || '86400000', 10), // 24 hours in ms
+    maxSize: parseInt(process.env.CACHE_MAX_SIZE || '1000', 10) // Maximum cache entries
   },
   
   // Scanner configuration
   scanner: {
     interval: process.env.SCAN_INTERVAL || '*/5 * * * *', // Every 5 minutes (cron format)
     onStartup: process.env.SCAN_ON_STARTUP !== 'false', // Scan when server starts
-    minVideoSizeMB: parseInt(process.env.MIN_VIDEO_SIZE_MB, 10) || 50, // Minimum video size in MB
+    minVideoSizeMB: parseInt(process.env.MIN_VIDEO_SIZE_MB || '50', 10), // Minimum video size in MB
     temporaryExtensions: (process.env.TEMPORARY_EXTENSIONS || '.part,.tmp,.download,.crdownload,.!qB,.filepart')
       .split(',')
       .map(ext => ext.trim().toLowerCase())
@@ -46,5 +72,4 @@ const config = {
   }
 };
 
-module.exports = config;
-
+export default config;

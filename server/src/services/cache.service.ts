@@ -1,10 +1,13 @@
-const config = require('../config');
-const logger = require('../config/logger');
+import config from '../config';
+import logger from '../config/logger';
 
 /**
  * Simple in-memory cache service with TTL support
  */
 class CacheService {
+  private cache: Map<string, any>;
+  private timestamps: Map<string, number>;
+
   constructor() {
     this.cache = new Map();
     this.timestamps = new Map();
@@ -12,16 +15,20 @@ class CacheService {
 
   /**
    * Get a value from cache
-   * @param {string} key - Cache key
-   * @param {number} ttl - Time to live in milliseconds
-   * @returns {*} Cached value or null if not found/expired
+   * @param key - Cache key
+   * @param ttl - Time to live in milliseconds
+   * @returns Cached value or null if not found/expired
    */
-  get(key, ttl) {
+  get(key: string, ttl: number): any {
     if (!this.cache.has(key)) {
       return null;
     }
 
     const timestamp = this.timestamps.get(key);
+    if (timestamp === undefined) {
+      return null;
+    }
+
     const now = Date.now();
 
     if (now - timestamp > ttl) {
@@ -38,16 +45,18 @@ class CacheService {
 
   /**
    * Set a value in cache
-   * @param {string} key - Cache key
-   * @param {*} value - Value to cache
+   * @param key - Cache key
+   * @param value - Value to cache
    */
-  set(key, value) {
+  set(key: string, value: any): void {
     // Implement simple LRU: if cache is full, remove oldest entry
     if (this.cache.size >= config.cache.maxSize && !this.cache.has(key)) {
       const oldestKey = this.timestamps.keys().next().value;
-      this.cache.delete(oldestKey);
-      this.timestamps.delete(oldestKey);
-      logger.debug('Cache eviction', { key: oldestKey });
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+        this.timestamps.delete(oldestKey);
+        logger.debug('Cache eviction', { key: oldestKey });
+      }
     }
 
     this.cache.set(key, value);
@@ -58,7 +67,7 @@ class CacheService {
   /**
    * Clear entire cache
    */
-  clear() {
+  clear(): void {
     const size = this.cache.size;
     this.cache.clear();
     this.timestamps.clear();
@@ -77,5 +86,4 @@ class CacheService {
 }
 
 // Export singleton instance
-module.exports = new CacheService();
-
+export default new CacheService();

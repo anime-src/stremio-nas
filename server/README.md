@@ -1,6 +1,6 @@
 # Stremio NAS API
 
-A Node.js Express API server that runs in Docker to serve video files over HTTP with streaming support. Provides file scanning, metadata extraction, and video streaming capabilities for Stremio addons.
+A TypeScript/Node.js Express API server that runs in Docker to serve video files over HTTP with streaming support. Provides file scanning, metadata extraction, and video streaming capabilities for Stremio addons.
 
 ## Features
 
@@ -306,9 +306,10 @@ The API listens on `0.0.0.0` to accept connections from other devices on your ne
 
 ### Database Issues
 
-1. **Database location**: Database is stored at `./storage/media.db` (inside container)
-2. **Permissions**: Ensure the `node` user has write access to the storage directory
-3. **Reset database**: Stop container, delete `storage/media.db`, restart container
+1. **Database location**: Database is stored in Docker volume `stremio-nas-db` at `/app/storage/media.db` (inside container)
+2. **Permissions**: Storage directory is automatically created with correct permissions
+3. **Reset database**: Stop container, remove volume: `docker compose down -v` (or `podman compose down -v`), restart container
+4. **Local development**: Database stored at `./storage/media.db` (relative to project root, auto-created)
 
 ### Container Won't Start
 
@@ -322,10 +323,15 @@ The API listens on `0.0.0.0` to accept connections from other devices on your ne
 - The container runs as a non-root user (`node`)
 - Volume mounts are read-only (`:ro`)
 - ID-based streaming URLs prevent path traversal attacks
-- Database stored in container (not exposed externally)
-- CORS can be restricted if needed (modify `src/app.js`)
+- Database stored in Docker volume (not exposed externally)
+- CORS can be restricted if needed (modify `src/app.ts`)
 
 ## Development
+
+### Prerequisites
+
+- Node.js 20+ (for TypeScript support)
+- npm or yarn
 
 ### Local Testing
 
@@ -334,9 +340,19 @@ The API listens on `0.0.0.0` to accept connections from other devices on your ne
    npm install
    ```
 
-2. **Run locally**:
+2. **Build TypeScript**:
+   ```bash
+   npm run build
+   ```
+
+3. **Run locally** (production mode):
    ```bash
    MEDIA_DIR=/path/to/videos PORT=3000 npm start
+   ```
+
+   Or run in development mode (auto-reload on changes):
+   ```bash
+   MEDIA_DIR=/path/to/videos PORT=3000 npm run dev
    ```
 
 3. **Test endpoints**:

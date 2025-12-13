@@ -1,4 +1,4 @@
-const path = require('path');
+import path from 'path';
 
 /**
  * Security utility functions
@@ -6,11 +6,11 @@ const path = require('path');
 
 /**
  * Validate that a path is within allowed directory
- * @param {string} filePath - Path to validate
- * @param {string} allowedDir - Allowed base directory
- * @returns {boolean} True if path is safe
+ * @param filePath - Path to validate
+ * @param allowedDir - Allowed base directory
+ * @returns True if path is safe
  */
-function isPathSafe(filePath, allowedDir) {
+export function isPathSafe(filePath: string, allowedDir: string): boolean {
   const resolvedPath = path.resolve(filePath);
   const resolvedAllowedDir = path.resolve(allowedDir);
   
@@ -19,19 +19,19 @@ function isPathSafe(filePath, allowedDir) {
 
 /**
  * Sanitize filename by removing dangerous characters
- * @param {string} filename - Filename to sanitize
- * @returns {string} Sanitized filename
+ * @param filename - Filename to sanitize
+ * @returns Sanitized filename
  */
-function sanitizeFilename(filename) {
+export function sanitizeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9._\-\/\\]/g, '_');
 }
 
 /**
  * Check if a string contains path traversal attempts
- * @param {string} input - Input to check
- * @returns {boolean} True if potentially dangerous
+ * @param input - Input to check
+ * @returns True if potentially dangerous
  */
-function hasPathTraversal(input) {
+export function hasPathTraversal(input: string): boolean {
   const dangerousPatterns = [
     /\.\./,           // Parent directory
     /\0/,             // Null byte
@@ -40,10 +40,3 @@ function hasPathTraversal(input) {
   
   return dangerousPatterns.some(pattern => pattern.test(input));
 }
-
-module.exports = {
-  isPathSafe,
-  sanitizeFilename,
-  hasPathTraversal
-};
-

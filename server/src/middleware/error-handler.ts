@@ -1,10 +1,14 @@
-const logger = require('../config/logger');
+import { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger';
 
 /**
  * Custom error class for API errors
  */
-class ApiError extends Error {
-  constructor(statusCode, message, details = null) {
+export class ApiError extends Error {
+  statusCode: number;
+  details: any;
+
+  constructor(statusCode: number, message: string, details: any = null) {
     super(message);
     this.statusCode = statusCode;
     this.details = details;
@@ -15,7 +19,7 @@ class ApiError extends Error {
 /**
  * Error handling middleware
  */
-function errorHandler(err, req, res, next) {
+export function errorHandler(err: Error | ApiError, req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof ApiError) {
     logger.warn('API Error', { 
       path: req.path, 
@@ -24,27 +28,31 @@ function errorHandler(err, req, res, next) {
       details: err.details
     });
     
-    return res.status(err.statusCode).json({
+    res.status(err.statusCode).json({
       error: err.message,
       ...(err.details && { details: err.details })
     });
+    return;
   }
 
   // Handle specific error types
-  if (err.code === 'ENOENT') {
+  const nodeError = err as NodeJS.ErrnoException;
+  if (nodeError.code === 'ENOENT') {
     logger.error('Resource not found', { path: req.path, error: err.message });
-    return res.status(404).json({ 
+    res.status(404).json({ 
       error: 'Resource not found',
       message: err.message
     });
+    return;
   }
 
-  if (err.code === 'EACCES') {
+  if (nodeError.code === 'EACCES') {
     logger.error('Permission denied', { path: req.path, error: err.message });
-    return res.status(403).json({ 
+    res.status(403).json({ 
       error: 'Access denied',
       message: err.message
     });
+    return;
   }
 
   // Generic error
@@ -59,9 +67,3 @@ function errorHandler(err, req, res, next) {
     message: process.env.NODE_ENV === 'development' ? err.message : 'An unexpected error occurred'
   });
 }
-
-module.exports = {
-  errorHandler,
-  ApiError
-};
-

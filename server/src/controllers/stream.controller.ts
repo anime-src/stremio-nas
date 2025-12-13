@@ -1,42 +1,12 @@
-const fs = require('fs');
-const path = require('path');
-const logger = require('../config/logger');
-const { ApiError } = require('../middleware/errorHandler');
-const { getMimeType, getFileStats } = require('../utils/fileUtils');
-const db = require('../services/database.service');
-const config = require('../config');
-
-// Simple in-memory cache for file stats (avoids repeated fs.stat calls)
-// Uses Map for O(1) lookups, with TTL-based expiration
-const statsCache = new Map();
-const STATS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Get file stats with caching
- */
-async function getCachedFileStats(filePath) {
-  const now = Date.now();
-  const cached = statsCache.get(filePath);
-  
-  if (cached && (now - cached.timestamp) < STATS_CACHE_TTL) {
-    return cached.stats;
-  }
-  
-  const stats = await getFileStats(filePath);
-  statsCache.set(filePath, { stats, timestamp: now });
-  
-  // Cleanup old entries (lazy cleanup on access)
-  if (statsCache.size > 1000) {
-    const entries = Array.from(statsCache.entries());
-    entries.forEach(([key, value]) => {
-      if ((now - value.timestamp) >= STATS_CACHE_TTL) {
-        statsCache.delete(key);
-      }
-    });
-  }
-  
-  return stats;
-}
+import { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
+import path from 'path';
+import logger from '../config/logger';
+import { ApiError } from '../middleware/error-handler';
+import { getMimeType } from '../utils/file-utils';
+import fileStatsService from '../services/file-stats.service';
+import db from '../services/database.service';
+import config from '../config';
 
 /**
  * Controller for video streaming operations
@@ -46,8 +16,8 @@ class StreamController {
    * Get file metadata without streaming content (HEAD request)
    * @route HEAD /stream/:id
    */
-  async getFileMetadata(req, res, next) {
-    const fileId = req.validatedFileId;
+  async getFileMetadata(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const fileId = req.validatedFileId!;
     
     logger.debug('Metadata request', { fileId });
     
@@ -64,7 +34,7 @@ class StreamController {
       const filePath = path.join(config.mediaDir, file.path);
       
       // Get file stats (cached for performance)
-      const stats = await getCachedFileStats(filePath);
+      const stats = await fileStatsService.getCachedFileStats(filePath);
       const contentType = getMimeType(filePath);
       
       // Set headers (same as GET but no body)
@@ -77,7 +47,7 @@ class StreamController {
       
       res.status(200).end();
       
-    } catch (err) {
+    } catch (err: any) {
       if (err.code === 'ENOENT') {
         logger.warn('File not found', { fileId });
         return next(new ApiError(404, 'File not found'));
@@ -95,9 +65,9 @@ class StreamController {
    * Stream video file with Range support (Optimized implementation)
    * @route GET /stream/:id
    */
-  async streamFile(req, res, next) {
+  async streamFile(req: Request, res: Response, next: NextFunction): Promise<void> {
     const startTime = Date.now();
-    const fileId = req.validatedFileId;
+    const fileId = req.validatedFileId!;
     
     logger.info('Stream request', { fileId, range: req.headers.range });
     
@@ -115,7 +85,7 @@ class StreamController {
       const filename = file.name;
       
       // Get file stats (cached for performance)
-      const stats = await getCachedFileStats(filePath);
+      const stats = await fileStatsService.getCachedFileStats(filePath);
       const contentType = getMimeType(filePath);
       
       // Parse Range header
@@ -129,17 +99,16 @@ class StreamController {
       // Stream partial content
       return this._streamPartialFile(res, filePath, stats, contentType, range, filename, startTime);
       
-    } catch (err) {
+    } catch (err: any) {
       const duration = Date.now() - startTime;
       
       if (err.code === 'ENOENT') {
-        logger.warn('File not found', { filename, filePath, duration: `${duration}ms` });
+        logger.warn('File not found', { fileId, duration: `${duration}ms` });
         return next(new ApiError(404, 'File not found'));
       }
       
       logger.error('Error accessing file', { 
-        filename, 
-        filePath, 
+        fileId, 
         error: err.message, 
         duration: `${duration}ms` 
       });
@@ -151,7 +120,14 @@ class StreamController {
    * Stream entire file
    * @private
    */
-  _streamFullFile(res, filePath, stats, contentType, filename, startTime) {
+  private _streamFullFile(
+    res: Response, 
+    filePath: string, 
+    stats: import('fs').Stats, 
+    contentType: string, 
+    filename: string, 
+    startTime: number
+  ): void {
     logger.debug('Streaming entire file', { filename, size: stats.size, contentType });
     
     // Set caching headers for better seeking performance
@@ -169,7 +145,7 @@ class StreamController {
     stream.pipe(res);
     
     // Cleanup: Destroy stream when response finishes (covers all cases)
-    const cleanup = (reason) => {
+    const cleanup = (reason: string) => {
       if (!stream.destroyed) {
         const duration = Date.now() - startTime;
         logger.debug('Stream cleanup', { filename, reason, duration: `${duration}ms` });
@@ -180,7 +156,7 @@ class StreamController {
     res.on('close', () => cleanup('close'));   // Client disconnects
     res.on('finish', () => cleanup('finish')); // Response completes normally
     
-    stream.on('error', (err) => {
+    stream.on('error', (err: Error) => {
       const duration = Date.now() - startTime;
       cleanup('error'); // Cleanup on error too
       logger.error('Stream error', { filename, error: err.message, duration: `${duration}ms` });
@@ -199,7 +175,15 @@ class StreamController {
    * Stream partial file with Range support
    * @private
    */
-  _streamPartialFile(res, filePath, stats, contentType, rangeHeader, filename, startTime) {
+  private _streamPartialFile(
+    res: Response, 
+    filePath: string, 
+    stats: import('fs').Stats, 
+    contentType: string, 
+    rangeHeader: string, 
+    filename: string, 
+    startTime: number
+  ): void {
     // Parse Range header (e.g., "bytes=0-1023" or "bytes=1024-")
     const parts = rangeHeader.replace(/bytes=/, '').split('-');
     const start = parseInt(parts[0], 10);
@@ -210,7 +194,8 @@ class StreamController {
     if (start >= stats.size || end >= stats.size || start > end) {
       logger.warn('Range not satisfiable', { filename, range: rangeHeader, fileSize: stats.size });
       res.status(416).setHeader('Content-Range', `bytes */${stats.size}`);
-      return res.json({ error: 'Range not satisfiable' });
+      res.json({ error: 'Range not satisfiable' });
+      return;
     }
     
     // Set headers for partial content
@@ -240,7 +225,7 @@ class StreamController {
     stream.pipe(res);
     
     // Cleanup: Destroy stream when response finishes (covers all cases)
-    const cleanup = (reason) => {
+    const cleanup = (reason: string) => {
       if (!stream.destroyed) {
         const duration = Date.now() - startTime;
         logger.debug('Partial stream cleanup', { 
@@ -256,7 +241,7 @@ class StreamController {
     res.on('close', () => cleanup('close'));   // Client disconnects
     res.on('finish', () => cleanup('finish')); // Response completes normally
     
-    stream.on('error', (err) => {
+    stream.on('error', (err: Error) => {
       const duration = Date.now() - startTime;
       cleanup('error'); // Cleanup on error too
       logger.error('Stream error', { 
@@ -282,5 +267,4 @@ class StreamController {
   }
 }
 
-module.exports = new StreamController();
-
+export default new StreamController();

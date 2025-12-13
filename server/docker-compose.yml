@@ -13,8 +13,23 @@ services:
       # File filtering
       - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
       
+      # Database configuration
+      - DB_PATH=/app/storage/media.db
+      
       # API configuration
       - API_HOST=http://localhost:3001
+      
+      # Scanner configuration
+      - SCAN_INTERVAL=*/5 * * * * # Cron expression: every 5 minutes
+      - SCAN_ON_STARTUP=true # Run scan on server startup
+      - MIN_VIDEO_SIZE_MB=50 # Minimum video file size in MB
+      
+      # Cache configuration
+      - CACHE_IMDB_TTL=86400000 # IMDB cache TTL in milliseconds (24 hours)
+      - CACHE_MAX_SIZE=1000 # Maximum cache entries
+      
+      # IMDB lookup configuration
+      - IMDB_LOOKUP_ENABLED=true # Enable IMDB lookup
       
       # Logging
       - LOG_LEVEL=info
@@ -37,8 +52,21 @@ services:
       
       # Example: Map Windows folder (adjust path to your actual folder)
       - C:\movies:/data/videos:ro
+      
+      # Persist database storage (use named volume for easy cleanup)
+      - stremio-nas-db:/app/storage
     networks:
       - media-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  stremio-nas-db:
+    # Database storage - removed when running 'docker compose down -v' or 'podman compose down -v'
 
 networks:
   media-network:

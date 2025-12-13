@@ -1,11 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const streamController = require('../controllers/stream.controller');
-const { validateFileId } = require('../middleware/validators');
+import { Router } from 'express';
+import streamController from '../controllers/stream.controller';
+import { validateFileId } from '../middleware/validators';
 
 /**
  * Video streaming routes
  */
+
+const router = Router();
 
 /**
  * @swagger
@@ -157,5 +158,4 @@ router.get('/:id', validateFileId, (req, res, next) => {
   streamController.streamFile(req, res, next);
 });
 
-module.exports = router;
-
+export default router;

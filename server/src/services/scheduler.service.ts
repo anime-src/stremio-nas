@@ -1,25 +1,43 @@
-const cron = require('node-cron');
-const logger = require('../config/logger');
-const fileScannerService = require('./fileScanner.service');
-const config = require('../config');
+import cron from 'node-cron';
+import logger from '../config/logger';
+import fileScannerService from './file-scanner.service';
+import config from '../config';
+
+interface ScanResult {
+  success: boolean;
+  filesFound: number;
+  processedCount: number;
+  skippedCount: number;
+  removedCount: number;
+  duration: number;
+}
+
+interface Job {
+  name: string;
+  job: import('node-cron').ScheduledTask;
+}
 
 /**
  * Scheduler service for periodic tasks like file scanning
  */
 class SchedulerService {
+  private jobs: Job[];
+  private isScanning: boolean;
+  private scanCallback: (() => Promise<ScanResult | null>) | null;
+
   constructor() {
     this.jobs = [];
     this.isScanning = false;
-    this.scanCallback = null; // Store the scan callback function
+    this.scanCallback = null;
   }
 
   /**
    * Execute scan with proper state management and error handling
    * @private
-   * @param {boolean} isManual - Whether this is a manual trigger
-   * @returns {Promise<Object>} Scan result
+   * @param isManual - Whether this is a manual trigger
+   * @returns Scan result
    */
-  async _executeScan(isManual = false) {
+  private async _executeScan(isManual: boolean = false): Promise<ScanResult | null> {
     if (this.isScanning) {
       if (isManual) {
         throw new Error('Scan already in progress');
@@ -39,7 +57,7 @@ class SchedulerService {
         duration: `${result.duration}ms`
       });
       return result;
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`${logPrefix} file scan failed`, { 
         error: error.message,
         stack: error.stack 
@@ -56,7 +74,7 @@ class SchedulerService {
   /**
    * Start all scheduled jobs
    */
-  start() {
+  start(): void {
     // Validate cron expression
     if (!cron.validate(config.scanner.interval)) {
       logger.error('Invalid scan interval cron expression', { 
@@ -67,17 +85,15 @@ class SchedulerService {
 
     // Create scan callback function
     this.scanCallback = async () => {
-      await this._executeScan(false);
+      return await this._executeScan(false);
     };
 
     // Schedule periodic file scan
-    const scanJob = cron.schedule(config.scanner.interval, this.scanCallback, {
-      scheduled: false // Don't start immediately
-    });
+    const scanJob = cron.schedule(config.scanner.interval, this.scanCallback!);
 
     this.jobs.push({ name: 'file-scan', job: scanJob });
     
-    // Start the job
+    // Start the job (it's scheduled but not started by default)
     scanJob.start();
     
     logger.info('Scheduler started', { 
@@ -90,7 +106,7 @@ class SchedulerService {
   /**
    * Stop all scheduled jobs
    */
-  stop() {
+  stop(): void {
     this.jobs.forEach(({ name, job }) => {
       job.stop();
       logger.info('Stopped scheduled job', { name });
@@ -101,9 +117,8 @@ class SchedulerService {
   /**
    * Get next scheduled scan time
    */
-  getNextScanTime() {
+  getNextScanTime(): string {
     if (this.jobs.length > 0) {
-      const job = this.jobs[0].job;
       // node-cron doesn't provide next run time, so we return the interval
       return `Next scan in: ${config.scanner.interval}`;
     }
@@ -124,13 +139,16 @@ class SchedulerService {
 
   /**
    * Manually trigger a scan (uses the same callback as scheduled scans)
-   * @returns {Promise<Object>} Scan result
+   * @returns Scan result
    */
-  async triggerScan() {
+  async triggerScan(): Promise<ScanResult> {
     // Use the same execution logic as scheduled scans
-    return await this._executeScan(true);
+    const result = await this._executeScan(true);
+    if (!result) {
+      throw new Error('Scan failed');
+    }
+    return result;
   }
 }
 
-module.exports = new SchedulerService();
-
+export default new SchedulerService();

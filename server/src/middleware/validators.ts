@@ -1,14 +1,30 @@
-const path = require('path');
-const { ApiError } = require('./errorHandler');
-const config = require('../config');
+import { Request, Response, NextFunction } from 'express';
+import path from 'path';
+import { ApiError } from './error-handler';
+import config from '../config';
+
+// Extend Express Request interface to include validated fields
+declare global {
+  namespace Express {
+    interface Request {
+      validatedExt?: string;
+      validatedFileId?: number;
+      validatedImdbId?: string;
+      validatedName?: string;
+      validatedFilename?: string;
+      validatedFilePath?: string;
+      rangeRequest?: { start: number; end: number } | null;
+    }
+  }
+}
 
 /**
  * Validate file extension query parameter
  */
-function validateExtension(req, res, next) {
+export function validateExtension(req: Request, _res: Response, next: NextFunction): void {
   const { ext } = req.query;
   
-  if (!ext) {
+  if (!ext || typeof ext !== 'string') {
     return next();
   }
 
@@ -30,7 +46,7 @@ function validateExtension(req, res, next) {
 /**
  * Validate file ID parameter
  */
-function validateFileId(req, res, next) {
+export function validateFileId(req: Request, _res: Response, next: NextFunction): void {
   const fileId = parseInt(req.params.id, 10);
   
   if (!fileId || isNaN(fileId) || fileId <= 0) {
@@ -46,10 +62,10 @@ function validateFileId(req, res, next) {
 /**
  * Validate IMDB ID query parameter
  */
-function validateImdbId(req, res, next) {
+export function validateImdbId(req: Request, _res: Response, next: NextFunction): void {
   const { imdb_id } = req.query;
   
-  if (!imdb_id) {
+  if (!imdb_id || typeof imdb_id !== 'string') {
     return next();
   }
 
@@ -68,10 +84,10 @@ function validateImdbId(req, res, next) {
 /**
  * Validate filename query parameter
  */
-function validateFileName(req, res, next) {
+export function validateFileName(req: Request, _res: Response, next: NextFunction): void {
   const { name } = req.query;
   
-  if (!name) {
+  if (!name || typeof name !== 'string') {
     return next();
   }
 
@@ -94,7 +110,7 @@ function validateFileName(req, res, next) {
 /**
  * Validate and sanitize file path parameter (deprecated - kept for backward compatibility)
  */
-function validateFilePath(req, res, next) {
+export function validateFilePath(req: Request, _res: Response, next: NextFunction): void {
   const filename = decodeURIComponent(req.params[0] || req.params.filename || '');
   
   if (!filename) {
@@ -127,11 +143,11 @@ function validateFilePath(req, res, next) {
 /**
  * Validate Range header
  */
-function validateRange(fileSize) {
-  return (req, res, next) => {
+export function validateRange(fileSize: number) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     const range = req.headers.range;
     
-    if (!range) {
+    if (!range || typeof range !== 'string') {
       req.rangeRequest = null;
       return next();
     }
@@ -149,7 +165,7 @@ function validateRange(fileSize) {
     // Validate range
     if (start >= fileSize || end >= fileSize || start > end || start < 0) {
       const error = new ApiError(416, 'Range not satisfiable');
-      error.rangeInfo = { fileSize, requestedRange: range };
+      (error as any).rangeInfo = { fileSize, requestedRange: range };
       throw error;
     }
 
@@ -157,13 +173,3 @@ function validateRange(fileSize) {
     next();
   };
 }
-
-module.exports = {
-  validateExtension,
-  validateFileId,
-  validateImdbId,
-  validateFileName,
-  validateFilePath,
-  validateRange
-};
-

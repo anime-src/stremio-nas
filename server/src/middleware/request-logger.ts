@@ -1,9 +1,10 @@
-const logger = require('../config/logger');
+import { Request, Response, NextFunction } from 'express';
+import logger from '../config/logger';
 
 /**
  * Request logging middleware
  */
-function requestLogger(req, res, next) {
+export default function requestLogger(req: Request, res: Response, next: NextFunction): void {
   const startTime = Date.now();
   
   // Log incoming request
@@ -16,7 +17,7 @@ function requestLogger(req, res, next) {
 
   // Capture response
   const originalSend = res.send;
-  res.send = function(data) {
+  res.send = function(data: any) {
     const duration = Date.now() - startTime;
     logger.info('Request completed', {
       method: req.method,
@@ -24,11 +25,8 @@ function requestLogger(req, res, next) {
       statusCode: res.statusCode,
       duration: `${duration}ms`
     });
-    originalSend.call(this, data);
+    return originalSend.call(this, data);
   };
 
   next();
 }
-
-module.exports = requestLogger;
-

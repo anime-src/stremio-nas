@@ -138,3 +138,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 *.db
+server-go
+
+# Database storage (auto-created at runtime)
+server/storage/
