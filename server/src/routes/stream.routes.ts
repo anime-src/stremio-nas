@@ -17,7 +17,7 @@ const router = Router();
 
 /**
  * @swagger
- * /stream/{id}:
+ * /api/stream/{id}:
  *   head:
  *     summary: Get file metadata
  *     tags: [Streaming]

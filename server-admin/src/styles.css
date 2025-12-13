@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/* Custom dark mode variant - uses class selector instead of media query */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* You can add global styles to this file, and also import other style files */

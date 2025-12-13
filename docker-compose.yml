@@ -98,6 +98,24 @@ services:
       stremio-nas-api:
         condition: service_started # Wait for API container to start
 
+  stremio-nas-admin:
+    build: ./server-admin
+    container_name: stremio-nas-admin
+    restart: unless-stopped
+    ports:
+      - "8081:80" # Map host port 8081 to container port 80
+    networks:
+      - media-network
+    depends_on:
+      stremio-nas-api:
+        condition: service_started # Wait for API container to start
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
 volumes:
   stremio-nas-db:
     # Database storage - removed when running 'docker compose down -v' or 'podman compose down -v'

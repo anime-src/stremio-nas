@@ -19,7 +19,7 @@ async function fetchFiles(options = {}) {
 		queryParams.set('imdb_id', options.imdb_id)
 	}
 	const queryString = queryParams.toString()
-	const url = `${apiUrl}/files${queryString ? '?' + queryString : ''}`
+	const url = `${apiUrl}/api/files${queryString ? '?' + queryString : ''}`
 
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		try {

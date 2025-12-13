@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'fs';
 import logger from '../config/logger';
 import config from '../config';
 import { FileRecord, DatabaseStats, ScanRecord, PreparedStatements } from '../types/database';
+import { WatchFolder, WatchFolderDTO } from '../types/watch-folder';
 
 /**
  * Database service using better-sqlite3 for persistent storage
@@ -104,11 +105,31 @@ class DatabaseService {
       }
     }
 
+    // Add watch_folder_id to files table if it doesn't exist (for tracking which folder a file belongs to)
+    try {
+      this.db.exec(`ALTER TABLE files ADD COLUMN watch_folder_id INTEGER`);
+      logger.info('Added watch_folder_id column to files table');
+    } catch (e: any) {
+      if (!e.message.includes('duplicate column')) {
+        logger.warn('Error adding watch_folder_id column to files', { error: e.message });
+      }
+    }
+
+    // Add watch_folder_id to scans table for tracking which folder was scanned (must be before prepared statements)
+    try {
+      this.db.exec(`ALTER TABLE scans ADD COLUMN watch_folder_id INTEGER`);
+      logger.info('Added watch_folder_id column to scans table');
+    } catch (e: any) {
+      if (!e.message.includes('duplicate column')) {
+        logger.warn('Error adding watch_folder_id column to scans', { error: e.message });
+      }
+    }
+
     // Prepare statements (faster than dynamic queries)
     this.stmts = {
       insertFile: this.db.prepare(`
-        INSERT INTO files (name, path, size, mtime, parsedName, type, imdb_id, season, episode, resolution, source, videoCodec, audioCodec, audioChannels, languages, releaseGroup, flags, edition, imdbName, imdbYear, imdbType, yearRange, image, starring, similarity, updatedAt)
-        VALUES (@name, @path, @size, @mtime, @parsedName, @type, @imdb_id, @season, @episode, @resolution, @source, @videoCodec, @audioCodec, @audioChannels, @languages, @releaseGroup, @flags, @edition, @imdbName, @imdbYear, @imdbType, @yearRange, @image, @starring, @similarity, CURRENT_TIMESTAMP)
+        INSERT INTO files (name, path, size, mtime, parsedName, type, imdb_id, season, episode, resolution, source, videoCodec, audioCodec, audioChannels, languages, releaseGroup, flags, edition, imdbName, imdbYear, imdbType, yearRange, image, starring, similarity, watch_folder_id, updatedAt)
+        VALUES (@name, @path, @size, @mtime, @parsedName, @type, @imdb_id, @season, @episode, @resolution, @source, @videoCodec, @audioCodec, @audioChannels, @languages, @releaseGroup, @flags, @edition, @imdbName, @imdbYear, @imdbType, @yearRange, @image, @starring, @similarity, @watch_folder_id, CURRENT_TIMESTAMP)
         ON CONFLICT(path) DO UPDATE SET
           name = @name,
           size = @size,
@@ -134,6 +155,7 @@ class DatabaseService {
           image = @image,
           starring = @starring,
           similarity = @similarity,
+          watch_folder_id = @watch_folder_id,
           updatedAt = CURRENT_TIMESTAMP
       `) as Database.Statement<FileRecord>,
       getAllFiles: this.db.prepare('SELECT * FROM files ORDER BY name') as Database.Statement<[]>,
@@ -153,9 +175,9 @@ class DatabaseService {
         ORDER BY name
       `) as Database.Statement<[string]>,
       insertScan: this.db.prepare(`
-        INSERT INTO scans (filesFound, duration, errors, processedCount, skippedCount)
-        VALUES (?, ?, ?, ?, ?)
-      `) as Database.Statement<[number, number, number, number, number]>,
+        INSERT INTO scans (filesFound, duration, errors, processedCount, skippedCount, watch_folder_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `) as Database.Statement<[number, number, number, number, number, number | null]>,
       getScanHistory: this.db.prepare(`
         SELECT * FROM scans 
         ORDER BY timestamp DESC 
@@ -194,6 +216,35 @@ class DatabaseService {
     } catch (e: any) {
       logger.warn('Error during URL column migration', { error: e.message });
     }
+
+    // Create watch_folders table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS watch_folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL,
+        name TEXT,
+        enabled INTEGER DEFAULT 1,
+        scan_interval TEXT NOT NULL,
+        allowed_extensions TEXT NOT NULL,
+        min_video_size_mb INTEGER DEFAULT 50,
+        temporary_extensions TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_watch_folders_enabled ON watch_folders(enabled);
+      CREATE INDEX IF NOT EXISTS idx_watch_folders_path ON watch_folders(path);
+    `);
+
+    // Create server_settings table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS server_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
 
     const count = this.db.prepare('SELECT COUNT(*) as count FROM files').get() as { count: number };
     logger.info('Database tables initialized', { fileCount: count.count });
@@ -334,13 +385,14 @@ class DatabaseService {
   /**
    * Record a scan to history
    */
-  recordScan(stats: { filesFound: number; duration: number; errors?: number; processedCount?: number; skippedCount?: number }): Database.RunResult {
+  recordScan(stats: { filesFound: number; duration: number; errors?: number; processedCount?: number; skippedCount?: number; watchFolderId?: number }): Database.RunResult {
     return this.stmts.insertScan.run(
       stats.filesFound,
       stats.duration,
       stats.errors || 0,
       stats.processedCount || 0,
-      stats.skippedCount || 0
+      stats.skippedCount || 0,
+      stats.watchFolderId || null
     );
   }
 
@@ -362,22 +414,43 @@ class DatabaseService {
   /**
    * Remove files that are not in the provided list of paths
    * Used to sync database with filesystem after scanning
+   * @param paths - List of file paths that should remain
+   * @param watchFolderId - Optional watch folder ID to only remove files from this folder
    */
-  removeFilesNotInList(paths: string[]): number {
+  removeFilesNotInList(paths: string[], watchFolderId?: number): number {
     if (paths.length === 0) {
-      // If no files found, clear everything
-      const result = this.stmts.clearFiles.run();
-      return result.changes;
+      if (watchFolderId !== undefined) {
+        // Remove all files from this watch folder
+        const deleteStmt = this.db.prepare(`DELETE FROM files WHERE watch_folder_id = ?`);
+        const result = deleteStmt.run(watchFolderId);
+        return result.changes;
+      } else {
+        // If no files found and no watch folder specified, clear everything
+        const result = this.stmts.clearFiles.run();
+        return result.changes;
+      }
     }
 
     // Build placeholders for SQL IN clause
     const placeholders = paths.map(() => '?').join(',');
-    const deleteStmt = this.db.prepare(`
-      DELETE FROM files WHERE path NOT IN (${placeholders})
-    `);
+    let deleteStmt: Database.Statement;
     
-    const result = deleteStmt.run(...paths);
-    return result.changes;
+    if (watchFolderId !== undefined) {
+      // Only remove files from this watch folder that are not in the list
+      deleteStmt = this.db.prepare(`
+        DELETE FROM files 
+        WHERE watch_folder_id = ? AND path NOT IN (${placeholders})
+      `);
+      const result = deleteStmt.run(watchFolderId, ...paths);
+      return result.changes;
+    } else {
+      // Remove files not in list (backward compatibility)
+      deleteStmt = this.db.prepare(`
+        DELETE FROM files WHERE path NOT IN (${placeholders})
+      `);
+      const result = deleteStmt.run(...paths);
+      return result.changes;
+    }
   }
 
   /**
@@ -405,6 +478,218 @@ class DatabaseService {
       }, {} as Record<string, number>),
       lastScan: scanHistory[0] || null
     };
+  }
+
+  /**
+   * Watch Folders CRUD Operations
+   */
+
+  /**
+   * Get all watch folders
+   */
+  getAllWatchFolders(): WatchFolder[] {
+    const stmt = this.db.prepare('SELECT * FROM watch_folders ORDER BY name, path');
+    const rows = stmt.all() as any[];
+    return rows.map(row => this._parseWatchFolderRow(row));
+  }
+
+  /**
+   * Get enabled watch folders only
+   */
+  getEnabledWatchFolders(): WatchFolder[] {
+    const stmt = this.db.prepare('SELECT * FROM watch_folders WHERE enabled = 1 ORDER BY name, path');
+    const rows = stmt.all() as any[];
+    return rows.map(row => this._parseWatchFolderRow(row));
+  }
+
+  /**
+   * Get watch folder by ID
+   */
+  getWatchFolderById(id: number): WatchFolder | null {
+    const stmt = this.db.prepare('SELECT * FROM watch_folders WHERE id = ?');
+    const row = stmt.get(id) as any;
+    return row ? this._parseWatchFolderRow(row) : null;
+  }
+
+  /**
+   * Get watch folder by path
+   */
+  getWatchFolderByPath(folderPath: string): WatchFolder | null {
+    const stmt = this.db.prepare('SELECT * FROM watch_folders WHERE path = ?');
+    const row = stmt.get(folderPath) as any;
+    return row ? this._parseWatchFolderRow(row) : null;
+  }
+
+  /**
+   * Create a new watch folder
+   */
+  createWatchFolder(data: WatchFolderDTO): WatchFolder {
+    const stmt = this.db.prepare(`
+      INSERT INTO watch_folders (path, name, enabled, scan_interval, allowed_extensions, min_video_size_mb, temporary_extensions, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+    
+    const result = stmt.run(
+      data.path,
+      data.name || null,
+      data.enabled !== undefined ? (data.enabled ? 1 : 0) : 1,
+      data.scan_interval || '*/5 * * * *',
+      JSON.stringify(data.allowed_extensions || ['.mp4', '.mkv', '.avi']),
+      data.min_video_size_mb || 50,
+      JSON.stringify(data.temporary_extensions || ['.part', '.tmp', '.download', '.crdownload', '.!qB', '.filepart'])
+    );
+
+    const created = this.getWatchFolderById(result.lastInsertRowid as number);
+    if (!created) {
+      throw new Error('Failed to retrieve created watch folder');
+    }
+    return created;
+  }
+
+  /**
+   * Update a watch folder
+   */
+  updateWatchFolder(id: number, data: Partial<WatchFolderDTO>): WatchFolder | null {
+    const existing = this.getWatchFolderById(id);
+    if (!existing) {
+      return null;
+    }
+
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (data.path !== undefined) {
+      updates.push('path = ?');
+      values.push(data.path);
+    }
+    if (data.name !== undefined) {
+      updates.push('name = ?');
+      values.push(data.name || null);
+    }
+    if (data.enabled !== undefined) {
+      updates.push('enabled = ?');
+      values.push(data.enabled ? 1 : 0);
+    }
+    if (data.scan_interval !== undefined) {
+      updates.push('scan_interval = ?');
+      values.push(data.scan_interval);
+    }
+    if (data.allowed_extensions !== undefined) {
+      updates.push('allowed_extensions = ?');
+      values.push(JSON.stringify(data.allowed_extensions));
+    }
+    if (data.min_video_size_mb !== undefined) {
+      updates.push('min_video_size_mb = ?');
+      values.push(data.min_video_size_mb);
+    }
+    if (data.temporary_extensions !== undefined) {
+      updates.push('temporary_extensions = ?');
+      values.push(JSON.stringify(data.temporary_extensions));
+    }
+
+    if (updates.length === 0) {
+      return existing;
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const stmt = this.db.prepare(`
+      UPDATE watch_folders 
+      SET ${updates.join(', ')}
+      WHERE id = ?
+    `);
+    
+    stmt.run(...values);
+    return this.getWatchFolderById(id);
+  }
+
+  /**
+   * Delete a watch folder
+   */
+  deleteWatchFolder(id: number): boolean {
+    const stmt = this.db.prepare('DELETE FROM watch_folders WHERE id = ?');
+    const result = stmt.run(id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Parse watch folder row from database
+   * @private
+   */
+  private _parseWatchFolderRow(row: any): WatchFolder {
+    return {
+      id: row.id,
+      path: row.path,
+      name: row.name,
+      enabled: row.enabled === 1,
+      scan_interval: row.scan_interval,
+      allowed_extensions: JSON.parse(row.allowed_extensions),
+      min_video_size_mb: row.min_video_size_mb,
+      temporary_extensions: JSON.parse(row.temporary_extensions),
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
+  }
+
+  /**
+   * Server Settings Operations
+   */
+
+  /**
+   * Get all server settings
+   */
+  getAllSettings(): Record<string, string> {
+    const stmt = this.db.prepare('SELECT key, value FROM server_settings');
+    const rows = stmt.all() as Array<{ key: string; value: string }>;
+    return rows.reduce((acc, row) => {
+      acc[row.key] = row.value;
+      return acc;
+    }, {} as Record<string, string>);
+  }
+
+  /**
+   * Get a specific server setting
+   */
+  getSetting(key: string): string | null {
+    const stmt = this.db.prepare('SELECT value FROM server_settings WHERE key = ?');
+    const row = stmt.get(key) as { value: string } | undefined;
+    return row ? row.value : null;
+  }
+
+  /**
+   * Set a server setting (upsert)
+   */
+  setSetting(key: string, value: string): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO server_settings (key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+    stmt.run(key, value);
+  }
+
+  /**
+   * Set multiple server settings
+   */
+  setSettings(settings: Record<string, string>): void {
+    const set = this.db.transaction((settings: Record<string, string>) => {
+      for (const [key, value] of Object.entries(settings)) {
+        this.setSetting(key, value);
+      }
+    });
+    set(settings);
+  }
+
+  /**
+   * Delete a server setting
+   */
+  deleteSetting(key: string): boolean {
+    const stmt = this.db.prepare('DELETE FROM server_settings WHERE key = ?');
+    const result = stmt.run(key);
+    return result.changes > 0;
   }
 
   /**

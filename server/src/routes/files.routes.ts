@@ -17,7 +17,7 @@ const router = Router();
 
 /**
  * @swagger
- * /files:
+ * /api/files:
  *   get:
  *     summary: List all video files
  *     tags: [Files]
@@ -76,7 +76,7 @@ router.get('/', validateExtension, validateImdbId, validateFileName, (req, res, 
 
 /**
  * @swagger
- * /files/refresh:
+ * /api/files/refresh:
  *   post:
  *     summary: Trigger manual file scan
  *     tags: [Files]
@@ -101,7 +101,7 @@ router.post('/refresh', (req, res, next) => {
 
 /**
  * @swagger
- * /files/stats:
+ * /api/files/stats:
  *   get:
  *     summary: Get database and scheduler statistics
  *     tags: [Files]
@@ -126,7 +126,7 @@ router.get('/stats', (req, res) => {
 
 /**
  * @swagger
- * /files/scan-history:
+ * /api/files/scan-history:
  *   get:
  *     summary: Get scan history
  *     tags: [Files]

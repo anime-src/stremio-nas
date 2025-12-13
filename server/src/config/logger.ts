@@ -29,4 +29,25 @@ const logger = winston.createLogger({
   ]
 });
 
+/**
+ * Update log level dynamically
+ * @param level - New log level (error, warn, info, verbose, debug, silly)
+ */
+export function setLogLevel(level: string): void {
+  const validLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
+  if (validLevels.includes(level.toLowerCase())) {
+    logger.level = level.toLowerCase();
+    logger.info('Log level updated', { newLevel: level });
+  } else {
+    logger.warn('Invalid log level', { level, validLevels });
+  }
+}
+
+/**
+ * Get current log level
+ */
+export function getLogLevel(): string {
+  return logger.level;
+}
+
 export default logger;

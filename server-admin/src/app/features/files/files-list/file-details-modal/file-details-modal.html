@@ -1,0 +1,286 @@
+<div
+  *ngIf="file"
+  class="fixed inset-0 bg-gray-600 dark:bg-gray-900 bg-opacity-50 dark:bg-opacity-75 overflow-y-auto z-50 flex items-start justify-center p-4 pt-8 pb-8"
+>
+  <div
+    class="relative w-11/12 md:w-4/5 lg:w-3/4 xl:w-2/3 max-w-5xl shadow-xl rounded-lg bg-white dark:bg-gray-800 transition-colors duration-200 my-8"
+  >
+    <!-- Header -->
+    <div class="flex justify-between items-start p-6 border-b border-gray-200 dark:border-gray-700">
+      <div class="flex-1">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+          {{ file.imdbName ? (file.imdbName + (file.imdbYear ? ' (' + file.imdbYear + ')' : '')) : file.name }}
+        </h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400">{{ file.name }}</p>
+      </div>
+      <button
+        (click)="closeModal()"
+        class="ml-4 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        type="button"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div class="p-6 overflow-y-auto max-h-[calc(100vh-250px)]">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column - Poster/Image -->
+        <div class="lg:col-span-1">
+          <div *ngIf="getImageSrc()" class="mb-6">
+            <img
+              [src]="getImageSrc()"
+              [alt]="file.imdbName || file.name"
+              class="w-full rounded-lg shadow-md"
+            />
+          </div>
+          <div *ngIf="file.watch_folder_id" class="mt-4">
+            <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+              Watch Folder
+            </label>
+            <p class="text-sm text-gray-900 dark:text-gray-100">{{ getWatchFolderName(file.watch_folder_id) }}</p>
+          </div>
+        </div>
+
+        <!-- Right Column - Details -->
+        <div class="lg:col-span-2">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Basic Information -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
+                Basic Information
+              </h3>
+
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  File Name
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100 break-words">{{ file.name }}</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Path
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100 break-all">{{ file.path }}</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Size
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100">{{ formatBytes(file.size || 0) }}</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Type
+                </label>
+                <span
+                  class="inline-flex px-2 py-1 text-xs font-semibold rounded-full"
+                  [class.bg-blue-100]="file.type === 'movie'"
+                  [class.dark:bg-blue-900/30]="file.type === 'movie'"
+                  [class.text-blue-800]="file.type === 'movie'"
+                  [class.dark:text-blue-300]="file.type === 'movie'"
+                  [class.bg-purple-100]="file.type === 'series'"
+                  [class.dark:bg-purple-900/30]="file.type === 'series'"
+                  [class.text-purple-800]="file.type === 'series'"
+                  [class.dark:text-purple-300]="file.type === 'series'"
+                >
+                  {{ file.type || 'Unknown' }}
+                </span>
+              </div>
+
+              <div *ngIf="file.parsedName">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Parsed Name
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.parsedName }}</p>
+              </div>
+
+              <div *ngIf="file.season !== null && file.episode !== null">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Episode
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100">
+                  Season {{ file.season }}, Episode {{ file.episode }}
+                </p>
+              </div>
+            </div>
+
+            <!-- IMDB Information -->
+            <div class="space-y-4">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
+                IMDB Information
+              </h3>
+
+              <div *ngIf="file.imdbName">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Title
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100">
+                  {{ file.imdbName }}
+                  <span *ngIf="file.imdbYear" class="text-gray-500 dark:text-gray-400">({{ file.imdbYear }})</span>
+                </p>
+              </div>
+
+              <div *ngIf="file.imdb_id">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  IMDB ID
+                </label>
+                <a
+                  [href]="'https://www.imdb.com/title/' + file.imdb_id"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {{ file.imdb_id }}
+                  <svg class="inline w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                  </svg>
+                </a>
+              </div>
+
+              <div *ngIf="file.imdbType">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  IMDB Type
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.imdbType }}</p>
+              </div>
+
+              <div *ngIf="file.starring">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Starring
+                </label>
+                <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.starring }}</p>
+              </div>
+
+              <div *ngIf="file.similarity !== null && file.similarity !== undefined">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  Match Similarity
+                </label>
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      class="bg-blue-600 dark:bg-blue-500 h-2 rounded-full"
+                      [style.width.%]="(file.similarity || 0) * 100"
+                    ></div>
+                  </div>
+                  <span class="text-sm text-gray-900 dark:text-gray-100">{{ ((file.similarity || 0) * 100).toFixed(0) }}%</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Technical Details -->
+            <div class="space-y-4 md:col-span-2">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
+                Technical Details
+              </h3>
+
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div *ngIf="file.resolution">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Resolution
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.resolution }}</p>
+                </div>
+
+                <div *ngIf="file.source">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Source
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.source }}</p>
+                </div>
+
+                <div *ngIf="file.videoCodec">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Video Codec
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.videoCodec }}</p>
+                </div>
+
+                <div *ngIf="file.audioCodec">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Audio Codec
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.audioCodec }}</p>
+                </div>
+
+                <div *ngIf="file.audioChannels">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Audio Channels
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.audioChannels }}</p>
+                </div>
+
+                <div *ngIf="file.releaseGroup">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Release Group
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.releaseGroup }}</p>
+                </div>
+
+                <div *ngIf="file.edition">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Edition
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">{{ file.edition }}</p>
+                </div>
+
+                <div *ngIf="file.mtime">
+                  <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">
+                    Modified
+                  </label>
+                  <p class="text-sm text-gray-900 dark:text-gray-100">
+                    {{ formatUnixTimestamp(file.mtime) }}
+                  </p>
+                </div>
+              </div>
+
+              <div *ngIf="getLanguages().length > 0" class="mt-4">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Languages
+                </label>
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    *ngFor="let lang of getLanguages()"
+                    class="px-2 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                  >
+                    {{ lang }}
+                  </span>
+                </div>
+              </div>
+
+              <div *ngIf="getFlags().length > 0" class="mt-4">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                  Flags
+                </label>
+                <div class="flex flex-wrap gap-2">
+                  <span
+                    *ngFor="let flag of getFlags()"
+                    class="px-2 py-1 text-xs font-medium rounded bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
+                  >
+                    {{ flag }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="flex justify-end p-6 border-t border-gray-200 dark:border-gray-700">
+      <button
+        (click)="closeModal()"
+        class="px-6 py-2 bg-gray-600 dark:bg-gray-700 text-white rounded-md hover:bg-gray-700 dark:hover:bg-gray-600 transition-colors font-medium"
+        type="button"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+</div>

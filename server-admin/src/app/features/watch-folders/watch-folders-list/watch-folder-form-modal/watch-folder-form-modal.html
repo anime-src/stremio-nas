@@ -1,0 +1,180 @@
+<div
+  *ngIf="isOpen"
+  class="fixed inset-0 bg-gray-600 dark:bg-gray-900 bg-opacity-50 dark:bg-opacity-75 overflow-y-auto z-50 flex items-start justify-center p-4 pt-8 pb-8"
+>
+  <div
+    class="relative p-5 border border-gray-300 dark:border-gray-700 w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800 transition-colors duration-200 my-8"
+  >
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {{ editingFolder ? 'Edit' : 'Create' }} Watch Folder
+      </h2>
+      <button
+        (click)="closeModal()"
+        class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        type="button"
+      >
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M6 18L18 6M6 6l12 12"
+          ></path>
+        </svg>
+      </button>
+    </div>
+
+    <form (ngSubmit)="onSubmit()" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >Path *</label
+        >
+        <input
+          type="text"
+          [ngModel]="formData().path"
+          (ngModelChange)="updateFormDataPath($event)"
+          name="path"
+          required
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+        <input
+          type="text"
+          [ngModel]="formData().name"
+          (ngModelChange)="updateFormDataName($event)"
+          name="name"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+      </div>
+
+      <div>
+        <label class="flex items-center">
+          <input
+            type="checkbox"
+            [ngModel]="formData().enabled"
+            (ngModelChange)="updateFormDataEnabled($event)"
+            name="enabled"
+            class="mr-2"
+          />
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Enabled</span>
+        </label>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >Scan Interval (Cron)</label
+        >
+        <input
+          type="text"
+          [ngModel]="formData().scan_interval"
+          (ngModelChange)="updateFormDataScanInterval($event)"
+          name="scan_interval"
+          placeholder="*/5 * * * *"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Example: */5 * * * * (every 5 minutes)
+        </p>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >Allowed Extensions</label
+        >
+        <div
+          *ngFor="let ext of formData().allowed_extensions; let i = index"
+          class="flex items-center mb-2"
+        >
+          <input
+            type="text"
+            [ngModel]="getAllowedExtension(i)"
+            (ngModelChange)="setAllowedExtension(i, $event)"
+            [name]="'ext_' + i"
+            placeholder=".mp4"
+            class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
+          <button
+            type="button"
+            (click)="removeExtension(i)"
+            class="ml-2 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+          >
+            Remove
+          </button>
+        </div>
+        <button
+          type="button"
+          (click)="addExtension()"
+          class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+        >
+          + Add Extension
+        </button>
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >Min Video Size (MB)</label
+        >
+        <input
+          type="number"
+          [ngModel]="formData().min_video_size_mb"
+          (ngModelChange)="updateFormDataMinVideoSize($event)"
+          name="min_video_size_mb"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >Temporary Extensions</label
+        >
+        <div
+          *ngFor="let ext of formData().temporary_extensions; let i = index"
+          class="flex items-center mb-2"
+        >
+          <input
+            type="text"
+            [ngModel]="getTemporaryExtension(i)"
+            (ngModelChange)="setTemporaryExtension(i, $event)"
+            [name]="'temp_ext_' + i"
+            placeholder=".part"
+            class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
+          <button
+            type="button"
+            (click)="removeTempExtension(i)"
+            class="ml-2 text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300"
+          >
+            Remove
+          </button>
+        </div>
+        <button
+          type="button"
+          (click)="addTempExtension()"
+          class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+        >
+          + Add Extension
+        </button>
+      </div>
+
+      <div class="flex justify-end space-x-3 pt-4">
+        <button
+          type="button"
+          (click)="closeModal()"
+          class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          class="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600"
+        >
+          {{ editingFolder ? 'Update' : 'Create' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

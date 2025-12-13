@@ -5,6 +5,7 @@ import logger from '../config/logger';
 import imdbService from './imdb.service';
 import db from './database.service';
 import { FileRecord } from '../types/database';
+import { WatchFolder } from '../types/watch-folder';
 
 interface RawFile {
   name: string;
@@ -36,30 +37,57 @@ interface ScanResult {
 class FileScannerService {
   /**
    * Scan filesystem and sync with database
-   * This is the main method that should be called for scanning
+   * @param watchFolderId - Optional watch folder ID to scan. If not provided, uses default config.
    * @returns Scan results
    */
-  async scan(): Promise<ScanResult> {
-    logger.info('Starting filesystem scan', { mediaDir: config.mediaDir });
+  async scan(watchFolderId?: number): Promise<ScanResult> {
+    // Get watch folder configuration
+    let watchFolder: WatchFolder | null = null;
+    let folderPath: string;
+    let allowedExtensions: string[];
+    let minVideoSizeMB: number;
+    let temporaryExtensions: string[];
+
+    if (watchFolderId) {
+      watchFolder = db.getWatchFolderById(watchFolderId);
+      if (!watchFolder) {
+        throw new Error(`Watch folder with ID ${watchFolderId} not found`);
+      }
+      folderPath = watchFolder.path;
+      allowedExtensions = watchFolder.allowed_extensions;
+      minVideoSizeMB = watchFolder.min_video_size_mb;
+      temporaryExtensions = watchFolder.temporary_extensions;
+    } else {
+      // Fallback to config for backward compatibility
+      folderPath = config.mediaDir;
+      allowedExtensions = config.allowedExtensions;
+      minVideoSizeMB = config.scanner.minVideoSizeMB;
+      temporaryExtensions = config.scanner.temporaryExtensions;
+    }
+
+    logger.info('Starting filesystem scan', { 
+      watchFolderId: watchFolder?.id,
+      path: folderPath 
+    });
     const startTime = Date.now();
     
     try {
       // Step 1: Scan filesystem (only file discovery)
-      const rawFiles = await this._scanDirectory(config.mediaDir);
+      const rawFiles = await this._scanDirectory(folderPath, '', allowedExtensions, minVideoSizeMB, temporaryExtensions);
       
       // Extract all paths from raw files (for cleanup)
       const allPaths = rawFiles.map(f => f.path);
       
       // Step 2: Process files (DB checks, IMDB lookups, filtering)
-      const processResult = await this._processFiles(rawFiles);
+      const processResult = await this._processFiles(rawFiles, watchFolder?.id);
       
       // Step 3: Update database with files that need changes
       if (processResult.filesToUpdate.length > 0) {
         db.upsertFilesBatch(processResult.filesToUpdate);
       }
       
-      // Step 4: Cleanup - remove files that no longer exist on filesystem
-      const removedCount = db.removeFilesNotInList(allPaths);
+      // Step 4: Cleanup - remove files that no longer exist on filesystem for this watch folder
+      const removedCount = db.removeFilesNotInList(allPaths, watchFolder?.id);
       
       if (removedCount > 0) {
         logger.info('Removed deleted files from database', { count: removedCount });
@@ -67,16 +95,18 @@ class FileScannerService {
       
       const duration = Date.now() - startTime;
       
-      // Record scan to history
+      // Record scan to history with watch folder ID
       db.recordScan({
         filesFound: allPaths.length,
         duration,
         errors: 0,
         processedCount: processResult.processedCount || 0,
-        skippedCount: processResult.skippedCount || 0
+        skippedCount: processResult.skippedCount || 0,
+        watchFolderId: watchFolder?.id
       });
       
       logger.info('Filesystem scan completed and synced to database', { 
+        watchFolderId: watchFolder?.id,
         fileCount: allPaths.length,
         processedCount: processResult.processedCount || 0,
         skippedCount: processResult.skippedCount || 0,
@@ -96,6 +126,7 @@ class FileScannerService {
       const duration = Date.now() - startTime;
       
       logger.error('Filesystem scan failed', {
+        watchFolderId: watchFolder?.id,
         error: error.message,
         stack: error.stack,
         duration: `${duration}ms`
@@ -105,7 +136,8 @@ class FileScannerService {
       db.recordScan({
         filesFound: 0,
         duration,
-        errors: 1
+        errors: 1,
+        watchFolderId: watchFolder?.id
       });
       
       throw error;
@@ -117,7 +149,13 @@ class FileScannerService {
    * Returns raw file stats without any processing
    * @private
    */
-  private async _scanDirectory(dirPath: string, basePath: string = ''): Promise<RawFile[]> {
+  private async _scanDirectory(
+    dirPath: string, 
+    basePath: string = '', 
+    allowedExtensions: string[],
+    minVideoSizeMB: number,
+    temporaryExtensions: string[]
+  ): Promise<RawFile[]> {
     const rawFiles: RawFile[] = [];
     
     try {
@@ -129,18 +167,18 @@ class FileScannerService {
         
         if (entry.isDirectory()) {
           // Recursively scan subdirectories
-          const result = await this._scanDirectory(fullPath, relativePath);
+          const result = await this._scanDirectory(fullPath, relativePath, allowedExtensions, minVideoSizeMB, temporaryExtensions);
           rawFiles.push(...result);
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name).toLowerCase();
           
           // Only check extension - no other processing
-          if (config.allowedExtensions.includes(ext)) {
+          if (allowedExtensions.includes(ext)) {
             try {
               const stats = await fs.stat(fullPath);
               
               // Skip incomplete/downloading files
-              if (this._shouldSkipFile(entry.name, stats)) {
+              if (this._shouldSkipFile(entry.name, stats, minVideoSizeMB, temporaryExtensions)) {
                 continue;
               }
               
@@ -171,7 +209,7 @@ class FileScannerService {
    * Returns only files that need database updates
    * @private
    */
-  private async _processFiles(rawFiles: RawFile[]): Promise<ProcessResult> {
+  private async _processFiles(rawFiles: RawFile[], watchFolderId?: number): Promise<ProcessResult> {
     const filesToUpdate: FileRecord[] = []; // Only files that need DB updates
     let processedCount = 0;
     let skippedCount = 0;
@@ -230,7 +268,8 @@ class FileScannerService {
           yearRange: imdbInfo.yearRange || null,
           image: imdbInfo.image || null,
           starring: imdbInfo.starring || null,
-          similarity: imdbInfo.similarity || null
+          similarity: imdbInfo.similarity || null,
+          watch_folder_id: watchFolderId || null
         };
         
         filesToUpdate.push(fileInfo);
@@ -255,21 +294,24 @@ class FileScannerService {
    * Check if file should be skipped (incomplete/downloading)
    * @private
    */
-  private _shouldSkipFile(fileName: string, stats: import('fs').Stats): boolean {
-    const tempExtensions = config.scanner.temporaryExtensions;
-    if (tempExtensions.some(ext => fileName.toLowerCase().endsWith(ext))) {
+  private _shouldSkipFile(
+    fileName: string, 
+    stats: import('fs').Stats,
+    minVideoSizeMB: number,
+    temporaryExtensions: string[]
+  ): boolean {
+    if (temporaryExtensions.some(ext => fileName.toLowerCase().endsWith(ext))) {
       logger.debug('Skipping temporary file', { fileName });
       return true;
     }
 
-    const minSizeMB = config.scanner.minVideoSizeMB;
     const sizeMB = stats.size / 1024 / 1024;
     
-    if (sizeMB < minSizeMB) {
+    if (sizeMB < minVideoSizeMB) {
       logger.debug('Skipping small file', { 
         fileName, 
         sizeMB: sizeMB.toFixed(2),
-        minRequired: minSizeMB 
+        minRequired: minVideoSizeMB 
       });
       return true;
     }

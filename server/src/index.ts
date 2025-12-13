@@ -1,9 +1,11 @@
 import createApp from './app';
 import config from './config';
 import logger from './config/logger';
+import { setLogLevel } from './config/logger';
 import scheduler from './services/scheduler.service';
 import fileScannerService from './services/file-scanner.service';
 import db from './services/database.service';
+import configService from './services/config.service';
 import { Server } from 'http';
 
 /**
@@ -12,36 +14,51 @@ import { Server } from 'http';
 async function startServer(): Promise<Server> {
   const app = createApp();
 
+  // Initialize configuration service (loads watch folders and settings from database)
+  await configService.initialize();
+
+  // Apply log level from database settings
+  const logLevel = configService.getLogLevel();
+  setLogLevel(logLevel);
+  logger.info('Log level set from database', { level: logLevel });
+
+  // Get enabled watch folders
+  const watchFolders = configService.getEnabledWatchFolders();
+  logger.info('Loaded watch folders', { count: watchFolders.length });
+
+  // Start scheduler with watch folders
+  scheduler.start(watchFolders);
+
   // Initial scan on startup (optional)
-  if (config.scanner.onStartup) {
-    logger.info('Running initial file scan...');
-    try {
-      await fileScannerService.scan();
-    } catch (error: any) {
-      logger.error('Initial file scan failed', { error: error.message });
+  if (configService.isScanOnStartup()) {
+    logger.info('Running initial file scans for enabled watch folders...');
+    for (const folder of watchFolders) {
+      if (folder.id) {
+        try {
+          await fileScannerService.scan(folder.id);
+        } catch (error: any) {
+          logger.error('Initial file scan failed', { 
+            watchFolderId: folder.id,
+            path: folder.path,
+            error: error.message 
+          });
+        }
+      }
     }
   }
-
-  // Start periodic scanning
-  scheduler.start();
 
   // Start listening
   const server = app.listen(config.port, config.host, () => {
     logger.info('Media API server started', {
       port: config.port,
       host: config.host,
-      mediaDir: config.mediaDir,
-      allowedExtensions: config.allowedExtensions.join(', '),
-      logLevel: config.logLevel,
+      logLevel: configService.getLogLevel(),
+      watchFolders: watchFolders.length,
       database: {
         path: config.database.path
       },
-      scanner: {
-        interval: config.scanner.interval,
-        onStartup: config.scanner.onStartup
-      },
-      cache: {
-        imdbTTL: `${config.cache.imdbTTL}ms`
+      scheduler: {
+        activeJobs: scheduler.getStatus().jobs.length
       }
     });
   });

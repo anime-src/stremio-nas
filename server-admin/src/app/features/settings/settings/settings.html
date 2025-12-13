@@ -1,0 +1,154 @@
+<div class="w-full max-w-full px-2 sm:px-4 py-8">
+  <h1 class="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">Server Settings</h1>
+
+  <!-- Success Message -->
+  <div
+    *ngIf="success()"
+    class="bg-green-100 dark:bg-green-900/30 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded mb-4"
+  >
+    {{ success() }}
+  </div>
+
+  <!-- Error Message -->
+  <div
+    *ngIf="error()"
+    class="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded mb-4"
+  >
+    {{ error() }}
+    <button (click)="error.set(null)" class="float-right font-bold">×</button>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="loading()" class="text-center py-8">
+    <div
+      class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"
+    ></div>
+    <p class="mt-2 text-gray-600 dark:text-gray-400">Loading settings...</p>
+  </div>
+
+  <!-- Settings Form -->
+  <div
+    *ngIf="!loading()"
+    class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 transition-colors duration-200"
+  >
+    <form (ngSubmit)="saveSettings()" class="space-y-6">
+      <!-- Log Level -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >Log Level</label
+        >
+        <select
+          [ngModel]="getSetting('logLevel')"
+          (ngModelChange)="setSetting('logLevel', $event)"
+          name="logLevel"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option *ngFor="let level of logLevels" [value]="level">{{ level }}</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Controls the verbosity of server logs
+        </p>
+      </div>
+
+      <!-- API Host -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >API Host</label
+        >
+        <input
+          type="text"
+          [ngModel]="getSetting('apiHost')"
+          (ngModelChange)="setSetting('apiHost', $event)"
+          name="apiHost"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Base URL for API requests</p>
+      </div>
+
+      <!-- Cache IMDB TTL -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >Cache IMDB TTL (ms)</label
+        >
+        <input
+          type="number"
+          [ngModel]="getSetting('cacheImdbTTL')"
+          (ngModelChange)="setSetting('cacheImdbTTL', $event)"
+          name="cacheImdbTTL"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Time-to-live for IMDB lookup cache in milliseconds
+        </p>
+      </div>
+
+      <!-- Cache Max Size -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >Cache Max Size</label
+        >
+        <input
+          type="number"
+          [ngModel]="getSetting('cacheMaxSize')"
+          (ngModelChange)="setSetting('cacheMaxSize', $event)"
+          name="cacheMaxSize"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Maximum number of entries in cache
+        </p>
+      </div>
+
+      <!-- IMDB Enabled -->
+      <div>
+        <label class="flex items-center">
+          <input
+            type="checkbox"
+            [ngModel]="getSetting('imdbEnabled')"
+            (ngModelChange)="setSetting('imdbEnabled', $event)"
+            name="imdbEnabled"
+            [checked]="getSetting('imdbEnabled') === 'true'"
+            (change)="setSetting('imdbEnabled', $any($event.target).checked ? 'true' : 'false')"
+            class="mr-2"
+          />
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300"
+            >IMDB Lookup Enabled</span
+          >
+        </label>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 ml-6">
+          Enable automatic IMDB metadata lookup for files
+        </p>
+      </div>
+
+      <!-- Scan on Startup -->
+      <div>
+        <label class="flex items-center">
+          <input
+            type="checkbox"
+            [ngModel]="getSetting('scanOnStartup')"
+            (ngModelChange)="setSetting('scanOnStartup', $event)"
+            name="scanOnStartup"
+            [checked]="getSetting('scanOnStartup') === 'true'"
+            (change)="setSetting('scanOnStartup', $any($event.target).checked ? 'true' : 'false')"
+            class="mr-2"
+          />
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Scan on Startup</span>
+        </label>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 ml-6">
+          Automatically scan watch folders when server starts
+        </p>
+      </div>
+
+      <!-- Save Button -->
+      <div class="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+        <button
+          type="submit"
+          [disabled]="saving()"
+          class="px-6 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md hover:bg-blue-700 dark:hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ saving() ? 'Saving...' : 'Save Settings' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

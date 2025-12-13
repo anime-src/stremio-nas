@@ -16,7 +16,7 @@ function getStreamUrl(file) {
 	// Handle Docker internal hostname - convert to external URL
 	const externalUrl = streamBaseUrl.includes('stremio-nas-api:') ? 'http://localhost:3001' : streamBaseUrl
 	
-	return `${externalUrl}/stream/${file.id}`
+	return `${externalUrl}/api/stream/${file.id}`
 }
 
 /**

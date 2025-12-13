@@ -30,6 +30,7 @@ export interface FileRecord {
   image?: string | object | null;
   starring?: string | null;
   similarity?: number | null;
+  watch_folder_id?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -56,6 +57,7 @@ export interface ScanRecord {
   errors: number;
   processedCount: number;
   skippedCount: number;
+  watch_folder_id?: number | null;
 }
 
 /**
@@ -71,7 +73,7 @@ export interface PreparedStatements {
   clearFiles: Database.Statement<[]>;
   searchFiles: Database.Statement<[string, string]>;
   filterByExtension: Database.Statement<[string]>;
-  insertScan: Database.Statement<[number, number, number, number, number]>;
+  insertScan: Database.Statement<[number, number, number, number, number, number | null]>;
   getScanHistory: Database.Statement<[number]>;
   getStats: Database.Statement<[]>;
   getTypeStats: Database.Statement<[]>;
