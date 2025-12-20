@@ -26,7 +26,8 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Install build dependencies for native modules (better-sqlite3)
-RUN apk add --no-cache python3 make g++
+# Install cifs-utils for SMB/UNC path mounting
+RUN apk add --no-cache python3 make g++ cifs-utils
 
 # Copy package files
 COPY package*.json ./
@@ -37,8 +38,11 @@ RUN npm ci --only=production
 # Copy built JavaScript files from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Create storage directory and set permissions before switching to node user
-RUN mkdir -p /app/storage && chown -R node:node /app
+# Create storage directory and network mount directory
+# Note: Network mounts require root privileges (CAP_SYS_ADMIN capability)
+# The /mnt/network directory will be created, but mounting requires root
+# Users can either: 1) Run container as root, or 2) Add CAP_SYS_ADMIN capability
+RUN mkdir -p /app/storage /mnt/network && chown -R node:node /app && chmod 777 /mnt/network
 
 # Use the node user that already exists in the image (UID 1000)
 USER node

@@ -3,6 +3,11 @@ services:
     build: .
     container_name: stremio-nas-api
     restart: unless-stopped
+    # Network/UNC path mounting requires root privileges or CAP_SYS_ADMIN capability
+    # Using CAP_SYS_ADMIN is more secure than running as root
+    # If you don't need network paths, you can remove this capability
+    cap_add:
+      - SYS_ADMIN
     ports:
       - "3001:3000"
     environment:
@@ -15,6 +20,11 @@ services:
       
       # Database configuration
       - DB_PATH=/app/storage/media.db
+      
+      # Encryption configuration
+      # Generate a secure 32-byte key: openssl rand -hex 32
+      # Or use base64: openssl rand -base64 32
+      - ENCRYPTION_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY
       
       # Scanner configuration
       - SCAN_INTERVAL=*/5 * * * * # Cron expression: every 5 minutes

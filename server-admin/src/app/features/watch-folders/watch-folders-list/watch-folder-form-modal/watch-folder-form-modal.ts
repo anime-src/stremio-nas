@@ -40,6 +40,10 @@ export class WatchFolderFormModalComponent implements OnChanges {
     allowed_extensions: ['.mp4', '.mkv', '.avi'],
     min_video_size_mb: 50,
     temporary_extensions: ['.part', '.tmp', '.download', '.crdownload', '.!qB', '.filepart'],
+    type: 'local',
+    username: '',
+    password: '',
+    domain: '',
   });
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -55,6 +59,10 @@ export class WatchFolderFormModalComponent implements OnChanges {
           allowed_extensions: [...folder.allowed_extensions],
           min_video_size_mb: folder.min_video_size_mb,
           temporary_extensions: [...folder.temporary_extensions],
+          type: folder.type || 'local',
+          username: folder.username || '',
+          password: '', // Never populate password for security
+          domain: folder.domain || '',
         });
       } else if (this.isOpen) {
         // Create mode - reset to defaults
@@ -66,6 +74,10 @@ export class WatchFolderFormModalComponent implements OnChanges {
           allowed_extensions: ['.mp4', '.mkv', '.avi'],
           min_video_size_mb: 50,
           temporary_extensions: ['.part', '.tmp', '.download', '.crdownload', '.!qB', '.filepart'],
+          type: 'local',
+          username: '',
+          password: '',
+          domain: '',
         });
       }
     }
@@ -155,5 +167,25 @@ export class WatchFolderFormModalComponent implements OnChanges {
 
   updateFormDataMinVideoSize(value: number): void {
     this.formData.update((data) => ({ ...data, min_video_size_mb: value }));
+  }
+
+  updateFormDataType(value: 'local' | 'network'): void {
+    this.formData.update((data) => ({ ...data, type: value }));
+  }
+
+  updateFormDataUsername(value: string): void {
+    this.formData.update((data) => ({ ...data, username: value }));
+  }
+
+  updateFormDataPassword(value: string): void {
+    this.formData.update((data) => ({ ...data, password: value }));
+  }
+
+  updateFormDataDomain(value: string): void {
+    this.formData.update((data) => ({ ...data, domain: value }));
+  }
+
+  isNetworkType(): boolean {
+    return this.formData().type === 'network';
   }
 }

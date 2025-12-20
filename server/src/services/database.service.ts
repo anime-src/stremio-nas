@@ -5,6 +5,7 @@ import logger from '../config/logger';
 import config from '../config';
 import { FileRecord, DatabaseStats, ScanRecord, PreparedStatements } from '../types/database';
 import { WatchFolder, WatchFolderDTO } from '../types/watch-folder';
+import encryptionService from './encryption.service';
 
 /**
  * Database service using better-sqlite3 for persistent storage
@@ -235,6 +236,21 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_watch_folders_enabled ON watch_folders(enabled);
       CREATE INDEX IF NOT EXISTS idx_watch_folders_path ON watch_folders(path);
     `);
+
+    // Migration: Add network path support columns
+    // Check if columns exist before adding (for existing databases)
+    const tableInfo = this.db.prepare("PRAGMA table_info(watch_folders)").all() as any[];
+    const columnNames = tableInfo.map(col => col.name);
+
+    if (!columnNames.includes('type')) {
+      this.db.exec(`
+        ALTER TABLE watch_folders ADD COLUMN type TEXT DEFAULT 'local';
+        ALTER TABLE watch_folders ADD COLUMN username TEXT;
+        ALTER TABLE watch_folders ADD COLUMN password_encrypted TEXT;
+        ALTER TABLE watch_folders ADD COLUMN domain TEXT;
+      `);
+      logger.info('Added network path support columns to watch_folders table');
+    }
 
     // Create server_settings table
     this.db.exec(`
@@ -524,9 +540,21 @@ class DatabaseService {
    * Create a new watch folder
    */
   createWatchFolder(data: WatchFolderDTO): WatchFolder {
+    // Encrypt password if provided
+    let passwordEncrypted: string | null = null;
+    if (data.password) {
+      try {
+        passwordEncrypted = encryptionService.encrypt(data.password);
+      } catch (error: any) {
+        logger.error('Failed to encrypt password', { error: error.message });
+        throw new Error('Failed to encrypt password');
+      }
+    }
+
+    const type = data.type || 'local';
     const stmt = this.db.prepare(`
-      INSERT INTO watch_folders (path, name, enabled, scan_interval, allowed_extensions, min_video_size_mb, temporary_extensions, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      INSERT INTO watch_folders (path, name, enabled, scan_interval, allowed_extensions, min_video_size_mb, temporary_extensions, type, username, password_encrypted, domain, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
     
     const result = stmt.run(
@@ -536,7 +564,11 @@ class DatabaseService {
       data.scan_interval || '*/5 * * * *',
       JSON.stringify(data.allowed_extensions || ['.mp4', '.mkv', '.avi']),
       data.min_video_size_mb || 50,
-      JSON.stringify(data.temporary_extensions || ['.part', '.tmp', '.download', '.crdownload', '.!qB', '.filepart'])
+      JSON.stringify(data.temporary_extensions || ['.part', '.tmp', '.download', '.crdownload', '.!qB', '.filepart']),
+      type,
+      data.username || null,
+      passwordEncrypted,
+      data.domain || null
     );
 
     const created = this.getWatchFolderById(result.lastInsertRowid as number);
@@ -586,6 +618,35 @@ class DatabaseService {
       updates.push('temporary_extensions = ?');
       values.push(JSON.stringify(data.temporary_extensions));
     }
+    if (data.type !== undefined) {
+      updates.push('type = ?');
+      values.push(data.type);
+    }
+    if (data.username !== undefined) {
+      updates.push('username = ?');
+      values.push(data.username || null);
+    }
+    if (data.password !== undefined) {
+      // Encrypt password if provided
+      if (data.password) {
+        try {
+          const passwordEncrypted = encryptionService.encrypt(data.password);
+          updates.push('password_encrypted = ?');
+          values.push(passwordEncrypted);
+        } catch (error: any) {
+          logger.error('Failed to encrypt password', { error: error.message });
+          throw new Error('Failed to encrypt password');
+        }
+      } else {
+        // Empty string means clear the password
+        updates.push('password_encrypted = ?');
+        values.push(null);
+      }
+    }
+    if (data.domain !== undefined) {
+      updates.push('domain = ?');
+      values.push(data.domain || null);
+    }
 
     if (updates.length === 0) {
       return existing;
@@ -614,7 +675,28 @@ class DatabaseService {
   }
 
   /**
+   * Get decrypted password for a watch folder (internal use only)
+   * Never expose this in API responses
+   */
+  getDecryptedPassword(watchFolderId: number): string | null {
+    const stmt = this.db.prepare('SELECT password_encrypted FROM watch_folders WHERE id = ?');
+    const row = stmt.get(watchFolderId) as any;
+    
+    if (!row || !row.password_encrypted) {
+      return null;
+    }
+
+    try {
+      return encryptionService.decrypt(row.password_encrypted);
+    } catch (error: any) {
+      logger.error('Failed to decrypt password', { watchFolderId, error: error.message });
+      return null;
+    }
+  }
+
+  /**
    * Parse watch folder row from database
+   * Never returns password_encrypted for security
    * @private
    */
   private _parseWatchFolderRow(row: any): WatchFolder {
@@ -627,6 +709,10 @@ class DatabaseService {
       allowed_extensions: JSON.parse(row.allowed_extensions),
       min_video_size_mb: row.min_video_size_mb,
       temporary_extensions: JSON.parse(row.temporary_extensions),
+      type: (row.type || 'local') as 'local' | 'network',
+      username: row.username || null,
+      password_encrypted: undefined, // Never return encrypted password
+      domain: row.domain || null,
       created_at: row.created_at,
       updated_at: row.updated_at
     };

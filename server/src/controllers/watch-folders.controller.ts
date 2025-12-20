@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import db from '../services/database.service';
 import scheduler from '../services/scheduler.service';
+import fileScanner from '../services/file-scanner.service';
 import logger from '../config/logger';
 import { WatchFolderDTO } from '../types/watch-folder';
 import cron from 'node-cron';
@@ -11,6 +12,44 @@ import { existsSync } from 'fs';
  */
 class WatchFoldersController {
   /**
+   * Sanitize watch folder response - never return password_encrypted
+   * @private
+   */
+  private sanitizeWatchFolder(folder: any): any {
+    const { password_encrypted, ...sanitized } = folder;
+    return sanitized;
+  }
+
+  /**
+   * Validate UNC path format
+   * @private
+   */
+  private isValidUNCPath(path: string): boolean {
+    // Windows UNC: \\server\share
+    // SMB: //server/share
+    return /^\\\\[^\\]+\\[^\\]+/.test(path) || /^\/\/[^\/]+\/[^\/]+/.test(path);
+  }
+
+  /**
+   * Validate network watch folder data
+   * @private
+   */
+  private validateNetworkFolder(data: WatchFolderDTO): string | null {
+    if (data.type !== 'network') {
+      return null; // Not a network folder, skip validation
+    }
+
+    if (!data.username || !data.password) {
+      return 'Username and password are required for network paths';
+    }
+
+    if (!this.isValidUNCPath(data.path)) {
+      return 'Invalid UNC path format. Expected: \\\\server\\share or //server/share';
+    }
+
+    return null;
+  }
+  /**
    * List all watch folders
    * @route GET /api/watch-folders
    */
@@ -19,12 +58,15 @@ class WatchFoldersController {
       const folders = db.getAllWatchFolders();
       const status = scheduler.getStatus();
       
-      // Add scanning status to each folder
-      const foldersWithStatus = folders.map(folder => ({
-        ...folder,
-        isScanning: folder.id ? scheduler.isScanning(folder.id) : false,
-        hasScheduledJob: folder.id ? status.jobs.some(j => j.watchFolderId === folder.id) : false
-      }));
+      // Add scanning status to each folder and sanitize
+      const foldersWithStatus = folders.map(folder => {
+        const sanitized = this.sanitizeWatchFolder(folder);
+        return {
+          ...sanitized,
+          isScanning: folder.id ? scheduler.isScanning(folder.id) : false,
+          hasScheduledJob: folder.id ? status.jobs.some(j => j.watchFolderId === folder.id) : false
+        };
+      });
 
       res.json(foldersWithStatus);
     } catch (err: any) {
@@ -52,8 +94,9 @@ class WatchFoldersController {
       }
 
       const status = scheduler.getStatus();
+      const sanitized = this.sanitizeWatchFolder(folder);
       const folderWithStatus = {
-        ...folder,
+        ...sanitized,
         isScanning: scheduler.isScanning(id),
         hasScheduledJob: status.jobs.some(j => j.watchFolderId === id)
       };
@@ -79,8 +122,20 @@ class WatchFoldersController {
         return;
       }
 
-      // Validate path exists
-      if (!existsSync(data.path)) {
+      // Set default type if not provided
+      if (!data.type) {
+        data.type = 'local';
+      }
+
+      // Validate network folder requirements
+      const networkError = this.validateNetworkFolder(data);
+      if (networkError) {
+        res.status(400).json({ error: networkError });
+        return;
+      }
+
+      // Validate path exists (only for local paths)
+      if (data.type === 'local' && !existsSync(data.path)) {
         res.status(400).json({ error: 'Path does not exist' });
         return;
       }
@@ -106,8 +161,9 @@ class WatchFoldersController {
         scheduler.addWatchFolder(folder);
       }
 
-      logger.info('Created watch folder', { id: folder.id, path: folder.path });
-      res.status(201).json(folder);
+      logger.info('Created watch folder', { id: folder.id, path: folder.path, type: folder.type });
+      const sanitized = this.sanitizeWatchFolder(folder);
+      res.status(201).json(sanitized);
     } catch (err: any) {
       logger.error('Error creating watch folder', { error: err.message });
       next(err);
@@ -128,22 +184,55 @@ class WatchFoldersController {
 
       const data: Partial<WatchFolderDTO> = req.body;
 
+      // Get existing folder to check current type
+      const existing = db.getWatchFolderById(id);
+      if (!existing) {
+        res.status(404).json({ error: 'Watch folder not found' });
+        return;
+      }
+
+      // Determine type (use existing if not changing)
+      const type = data.type !== undefined ? data.type : existing.type;
+
+      // Validate network folder requirements if type is network
+      if (type === 'network') {
+        const networkData: WatchFolderDTO = {
+          path: data.path || existing.path, // Ensure path is always defined
+          ...data,
+          type: 'network',
+          username: data.username !== undefined ? data.username : existing.username || undefined,
+          password: data.password !== undefined ? data.password : undefined, // Password might not be in update
+          domain: data.domain !== undefined ? data.domain : existing.domain || undefined
+        };
+        const networkError = this.validateNetworkFolder(networkData);
+        if (networkError) {
+          res.status(400).json({ error: networkError });
+          return;
+        }
+      }
+
       // Validate cron expression if provided
       if (data.scan_interval && !cron.validate(data.scan_interval)) {
         res.status(400).json({ error: 'Invalid cron expression' });
         return;
       }
 
-      // Validate path exists if provided
-      if (data.path && !existsSync(data.path)) {
+      // Validate path exists if provided (only for local paths)
+      if (data.path && type === 'local' && !existsSync(data.path)) {
         res.status(400).json({ error: 'Path does not exist' });
+        return;
+      }
+
+      // Validate UNC path format if changing to network type
+      if (data.path && type === 'network' && !this.isValidUNCPath(data.path)) {
+        res.status(400).json({ error: 'Invalid UNC path format. Expected: \\\\server\\share or //server/share' });
         return;
       }
 
       // Check if path already exists (if changing path)
       if (data.path) {
-        const existing = db.getWatchFolderByPath(data.path);
-        if (existing && existing.id !== id) {
+        const pathExisting = db.getWatchFolderByPath(data.path);
+        if (pathExisting && pathExisting.id !== id) {
           res.status(409).json({ error: 'Watch folder with this path already exists' });
           return;
         }
@@ -162,8 +251,9 @@ class WatchFoldersController {
         scheduler.addWatchFolder(folder);
       }
 
-      logger.info('Updated watch folder', { id: folder.id, path: folder.path });
-      res.json(folder);
+      logger.info('Updated watch folder', { id: folder.id, path: folder.path, type: folder.type });
+      const sanitized = this.sanitizeWatchFolder(folder);
+      res.json(sanitized);
     } catch (err: any) {
       logger.error('Error updating watch folder', { error: err.message });
       next(err);
@@ -188,6 +278,19 @@ class WatchFoldersController {
         return;
       }
 
+      // Unmount network path if it's a network folder
+      if (folder.type === 'network') {
+        try {
+          await fileScanner.unmountNetworkPath(id);
+        } catch (error: any) {
+          logger.warn('Failed to unmount network path during deletion', { 
+            id, 
+            error: error.message 
+          });
+          // Continue with deletion even if unmount fails
+        }
+      }
+
       // Remove from scheduler
       scheduler.removeWatchFolder(id);
 
@@ -198,7 +301,7 @@ class WatchFoldersController {
         return;
       }
 
-      logger.info('Deleted watch folder', { id, path: folder.path });
+      logger.info('Deleted watch folder', { id, path: folder.path, type: folder.type });
       res.status(204).send();
     } catch (err: any) {
       logger.error('Error deleting watch folder', { error: err.message });
@@ -285,8 +388,9 @@ class WatchFoldersController {
       const allScans = db.getScanHistory(100);
       const folderScans = allScans.filter(scan => scan.watch_folder_id === id);
 
+      const sanitized = this.sanitizeWatchFolder(folder);
       res.json({
-        watchFolder: folder,
+        watchFolder: sanitized,
         scanHistory: folderScans,
         lastScan: folderScans[0] || null,
         totalScans: folderScans.length,

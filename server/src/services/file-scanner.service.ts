@@ -1,11 +1,15 @@
 import { promises as fs } from 'fs';
 import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import config from '../config';
 import logger from '../config/logger';
 import imdbService from './imdb.service';
 import db from './database.service';
 import { FileRecord } from '../types/database';
 import { WatchFolder } from '../types/watch-folder';
+
+const execAsync = promisify(exec);
 
 interface RawFile {
   name: string;
@@ -35,6 +39,8 @@ interface ScanResult {
  * File scanner service with database persistence
  */
 class FileScannerService {
+  // Track mounted network paths: watchFolderId -> mountPoint
+  private mountedPaths: Map<number, string> = new Map();
   /**
    * Scan filesystem and sync with database
    * @param watchFolderId - Optional watch folder ID to scan. If not provided, uses default config.
@@ -67,11 +73,26 @@ class FileScannerService {
 
     logger.info('Starting filesystem scan', { 
       watchFolderId: watchFolder?.id,
-      path: folderPath 
+      path: folderPath,
+      type: watchFolder?.type || 'local'
     });
     const startTime = Date.now();
     
+    let mountPoint: string | null = null;
+    let shouldUnmount = false;
+    
     try {
+      // For network paths, mount before scanning
+      if (watchFolder && watchFolder.type === 'network') {
+        mountPoint = await this._mountNetworkPath(watchFolder);
+        if (mountPoint) {
+          folderPath = mountPoint; // Use mounted path for scanning
+          shouldUnmount = true;
+        } else {
+          throw new Error('Failed to mount network path');
+        }
+      }
+
       // Step 1: Scan filesystem (only file discovery)
       const rawFiles = await this._scanDirectory(folderPath, '', allowedExtensions, minVideoSizeMB, temporaryExtensions);
       
@@ -141,6 +162,150 @@ class FileScannerService {
       });
       
       throw error;
+    } finally {
+      // Unmount network path if we mounted it for this scan
+      // Note: We keep mounts active for scheduled scans, only unmount on manual scans or errors
+      // For now, we'll keep mounts active to avoid remounting on every scheduled scan
+      // Unmount will happen when watch folder is deleted or disabled
+      if (shouldUnmount && mountPoint && watchFolder?.id) {
+        // Only unmount if this was a one-time scan (not scheduled)
+        // For scheduled scans, keep the mount active
+        logger.debug('Keeping network mount active for scheduled scans', { 
+          watchFolderId: watchFolder.id,
+          mountPoint 
+        });
+      }
+    }
+  }
+
+  /**
+   * Mount network path using CIFS
+   * @private
+   */
+  private async _mountNetworkPath(watchFolder: WatchFolder): Promise<string | null> {
+    if (!watchFolder.id) {
+      throw new Error('Watch folder ID is required for network mounting');
+    }
+
+    // Check if already mounted
+    if (this.mountedPaths.has(watchFolder.id)) {
+      const existingMount = this.mountedPaths.get(watchFolder.id)!;
+      logger.debug('Network path already mounted', { 
+        watchFolderId: watchFolder.id,
+        mountPoint: existingMount 
+      });
+      return existingMount;
+    }
+
+    // Get decrypted password
+    const password = db.getDecryptedPassword(watchFolder.id);
+    if (!password) {
+      throw new Error('Password not available for network path');
+    }
+
+    // Convert Windows UNC path to SMB path format
+    // \\server\share -> //server/share
+    let smbPath = watchFolder.path.replace(/\\/g, '/');
+    if (!smbPath.startsWith('//')) {
+      smbPath = '//' + smbPath.replace(/^\/+/, '');
+    }
+
+    // Mount point: /mnt/network/{watchFolderId}
+    const mountPoint = `/mnt/network/${watchFolder.id}`;
+
+    try {
+      // Create mount point directory
+      await fs.mkdir(mountPoint, { recursive: true });
+
+      // Build mount options
+      const mountOptions: string[] = [];
+      mountOptions.push(`username=${watchFolder.username || ''}`);
+      mountOptions.push(`password=${password}`);
+      if (watchFolder.domain) {
+        mountOptions.push(`domain=${watchFolder.domain}`);
+      }
+      // Note: Mounting requires root privileges
+      // If running as non-root, container needs CAP_SYS_ADMIN or run as root
+      // For node user (uid=1000), we still set ownership
+      mountOptions.push('uid=1000'); // node user
+      mountOptions.push('gid=1000'); // node group
+      mountOptions.push('file_mode=0644');
+      mountOptions.push('dir_mode=0755');
+      mountOptions.push('iocharset=utf8');
+      mountOptions.push('noperm'); // Don't check permissions on mount
+
+      const mountCmd = `mount -t cifs "${smbPath}" "${mountPoint}" -o ${mountOptions.join(',')}`;
+      
+      logger.info('Mounting network path', { 
+        watchFolderId: watchFolder.id,
+        smbPath,
+        mountPoint 
+      });
+
+      try {
+        await execAsync(mountCmd);
+        this.mountedPaths.set(watchFolder.id, mountPoint);
+        logger.info('Network path mounted successfully', { 
+          watchFolderId: watchFolder.id,
+          mountPoint 
+        });
+        return mountPoint;
+      } catch (mountError: any) {
+        logger.error('Failed to mount network path', { 
+          watchFolderId: watchFolder.id,
+          error: mountError.message,
+          stderr: mountError.stderr 
+        });
+        // Clean up mount point directory if mount failed
+        try {
+          await fs.rmdir(mountPoint);
+        } catch (rmError) {
+          // Ignore cleanup errors
+        }
+        return null;
+      }
+    } catch (error: any) {
+      logger.error('Error preparing network mount', { 
+        watchFolderId: watchFolder.id,
+        error: error.message 
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Unmount network path
+   * @param watchFolderId - Watch folder ID
+   */
+  async unmountNetworkPath(watchFolderId: number): Promise<void> {
+    const mountPoint = this.mountedPaths.get(watchFolderId);
+    if (!mountPoint) {
+      logger.debug('Network path not mounted', { watchFolderId });
+      return;
+    }
+
+    try {
+      logger.info('Unmounting network path', { watchFolderId, mountPoint });
+      await execAsync(`umount "${mountPoint}"`);
+      this.mountedPaths.delete(watchFolderId);
+      
+      // Remove mount point directory
+      try {
+        await fs.rmdir(mountPoint);
+      } catch (rmError) {
+        // Ignore cleanup errors
+      }
+      
+      logger.info('Network path unmounted successfully', { watchFolderId });
+    } catch (error: any) {
+      logger.error('Failed to unmount network path', { 
+        watchFolderId,
+        mountPoint,
+        error: error.message,
+        stderr: error.stderr 
+      });
+      // Still remove from map even if unmount failed
+      this.mountedPaths.delete(watchFolderId);
     }
   }
 

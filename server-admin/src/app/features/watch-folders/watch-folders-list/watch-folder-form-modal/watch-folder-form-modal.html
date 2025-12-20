@@ -26,6 +26,37 @@
     </div>
 
     <form (ngSubmit)="onSubmit()" class="space-y-4">
+      <!-- Type Selector -->
+      <div>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >Type *</label
+        >
+        <div class="flex space-x-4">
+          <label class="flex items-center">
+            <input
+              type="radio"
+              [ngModel]="formData().type"
+              (ngModelChange)="updateFormDataType('local')"
+              name="type"
+              value="local"
+              class="mr-2"
+            />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Local</span>
+          </label>
+          <label class="flex items-center">
+            <input
+              type="radio"
+              [ngModel]="formData().type"
+              (ngModelChange)="updateFormDataType('network')"
+              name="type"
+              value="network"
+              class="mr-2"
+            />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Network (UNC)</span>
+          </label>
+        </div>
+      </div>
+
       <div>
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >Path *</label
@@ -36,8 +67,62 @@
           (ngModelChange)="updateFormDataPath($event)"
           name="path"
           required
+          [placeholder]="isNetworkType() ? '\\\\server\\share' : '/path/to/folder'"
           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
         />
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" *ngIf="isNetworkType()">
+          UNC path format: \\\\server\\share or //server/share
+        </p>
+      </div>
+
+      <!-- Network Credentials (shown only for network type) -->
+      <div *ngIf="isNetworkType()" class="space-y-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Network Credentials</h3>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >Username *</label
+          >
+          <input
+            type="text"
+            [ngModel]="formData().username"
+            (ngModelChange)="updateFormDataUsername($event)"
+            name="username"
+            required
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >Password *</label
+          >
+          <input
+            type="password"
+            [ngModel]="formData().password"
+            (ngModelChange)="updateFormDataPassword($event)"
+            name="password"
+            [required]="isNetworkType()"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400" *ngIf="editingFolder">
+            Leave blank to keep existing password
+          </p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >Domain (optional)</label
+          >
+          <input
+            type="text"
+            [ngModel]="formData().domain"
+            (ngModelChange)="updateFormDataDomain($event)"
+            name="domain"
+            placeholder="WORKGROUP"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
       </div>
 
       <div>
