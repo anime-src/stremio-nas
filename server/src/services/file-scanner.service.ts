@@ -2,7 +2,6 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import config from '../config';
 import logger from '../config/logger';
 import imdbService from './imdb.service';
 import db from './database.service';
@@ -43,38 +42,25 @@ class FileScannerService {
   private mountedPaths: Map<number, string> = new Map();
   /**
    * Scan filesystem and sync with database
-   * @param watchFolderId - Optional watch folder ID to scan. If not provided, uses default config.
+   * @param watchFolderId - Watch folder ID to scan (required)
    * @returns Scan results
    */
-  async scan(watchFolderId?: number): Promise<ScanResult> {
+  async scan(watchFolderId: number): Promise<ScanResult> {
     // Get watch folder configuration
-    let watchFolder: WatchFolder | null = null;
-    let folderPath: string;
-    let allowedExtensions: string[];
-    let minVideoSizeMB: number;
-    let temporaryExtensions: string[];
-
-    if (watchFolderId) {
-      watchFolder = db.getWatchFolderById(watchFolderId);
-      if (!watchFolder) {
-        throw new Error(`Watch folder with ID ${watchFolderId} not found`);
-      }
-      folderPath = watchFolder.path;
-      allowedExtensions = watchFolder.allowed_extensions;
-      minVideoSizeMB = watchFolder.min_video_size_mb;
-      temporaryExtensions = watchFolder.temporary_extensions;
-    } else {
-      // Fallback to config for backward compatibility
-      folderPath = config.mediaDir;
-      allowedExtensions = config.allowedExtensions;
-      minVideoSizeMB = config.scanner.minVideoSizeMB;
-      temporaryExtensions = config.scanner.temporaryExtensions;
+    const watchFolder = db.getWatchFolderById(watchFolderId);
+    if (!watchFolder) {
+      throw new Error(`Watch folder with ID ${watchFolderId} not found`);
     }
 
+    let folderPath = watchFolder.path;
+    const allowedExtensions = watchFolder.allowed_extensions;
+    const minVideoSizeMB = watchFolder.min_video_size_mb;
+    const temporaryExtensions = watchFolder.temporary_extensions;
+
     logger.info('Starting filesystem scan', { 
-      watchFolderId: watchFolder?.id,
+      watchFolderId: watchFolder.id,
       path: folderPath,
-      type: watchFolder?.type || 'local'
+      type: watchFolder.type || 'local'
     });
     const startTime = Date.now();
     
@@ -83,7 +69,7 @@ class FileScannerService {
     
     try {
       // For network paths, mount before scanning
-      if (watchFolder && watchFolder.type === 'network') {
+      if (watchFolder.type === 'network') {
         mountPoint = await this._mountNetworkPath(watchFolder);
         if (mountPoint) {
           folderPath = mountPoint; // Use mounted path for scanning
@@ -100,7 +86,7 @@ class FileScannerService {
       const allPaths = rawFiles.map(f => f.path);
       
       // Step 2: Process files (DB checks, IMDB lookups, filtering)
-      const processResult = await this._processFiles(rawFiles, watchFolder?.id);
+      const processResult = await this._processFiles(rawFiles, watchFolderId);
       
       // Step 3: Update database with files that need changes
       if (processResult.filesToUpdate.length > 0) {
@@ -108,7 +94,7 @@ class FileScannerService {
       }
       
       // Step 4: Cleanup - remove files that no longer exist on filesystem for this watch folder
-      const removedCount = db.removeFilesNotInList(allPaths, watchFolder?.id);
+      const removedCount = db.removeFilesNotInList(allPaths, watchFolderId);
       
       if (removedCount > 0) {
         logger.info('Removed deleted files from database', { count: removedCount });
@@ -123,11 +109,11 @@ class FileScannerService {
         errors: 0,
         processedCount: processResult.processedCount || 0,
         skippedCount: processResult.skippedCount || 0,
-        watchFolderId: watchFolder?.id
+        watchFolderId: watchFolderId
       });
       
       logger.info('Filesystem scan completed and synced to database', { 
-        watchFolderId: watchFolder?.id,
+        watchFolderId: watchFolderId,
         fileCount: allPaths.length,
         processedCount: processResult.processedCount || 0,
         skippedCount: processResult.skippedCount || 0,
@@ -147,7 +133,7 @@ class FileScannerService {
       const duration = Date.now() - startTime;
       
       logger.error('Filesystem scan failed', {
-        watchFolderId: watchFolder?.id,
+        watchFolderId: watchFolderId,
         error: error.message,
         stack: error.stack,
         duration: `${duration}ms`
@@ -158,7 +144,7 @@ class FileScannerService {
         filesFound: 0,
         duration,
         errors: 1,
-        watchFolderId: watchFolder?.id
+        watchFolderId: watchFolderId
       });
       
       throw error;
@@ -167,11 +153,11 @@ class FileScannerService {
       // Note: We keep mounts active for scheduled scans, only unmount on manual scans or errors
       // For now, we'll keep mounts active to avoid remounting on every scheduled scan
       // Unmount will happen when watch folder is deleted or disabled
-      if (shouldUnmount && mountPoint && watchFolder?.id) {
+      if (shouldUnmount && mountPoint) {
         // Only unmount if this was a one-time scan (not scheduled)
         // For scheduled scans, keep the mount active
         logger.debug('Keeping network mount active for scheduled scans', { 
-          watchFolderId: watchFolder.id,
+          watchFolderId: watchFolderId,
           mountPoint 
         });
       }
@@ -374,7 +360,7 @@ class FileScannerService {
    * Returns only files that need database updates
    * @private
    */
-  private async _processFiles(rawFiles: RawFile[], watchFolderId?: number): Promise<ProcessResult> {
+  private async _processFiles(rawFiles: RawFile[], watchFolderId: number): Promise<ProcessResult> {
     const filesToUpdate: FileRecord[] = []; // Only files that need DB updates
     let processedCount = 0;
     let skippedCount = 0;
@@ -434,7 +420,7 @@ class FileScannerService {
           image: imdbInfo.image || null,
           starring: imdbInfo.starring || null,
           similarity: imdbInfo.similarity || null,
-          watch_folder_id: watchFolderId || null
+          watch_folder_id: watchFolderId
         };
         
         filesToUpdate.push(fileInfo);

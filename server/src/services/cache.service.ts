@@ -1,89 +1,26 @@
-import config from '../config';
-import logger from '../config/logger';
+/**
+ * Cache service - factory-based implementation
+ * 
+ * This module exports a singleton cache service instance created by the factory.
+ * The default implementation is in-memory cache, but other cache types can be configured
+ * via the CACHE_TYPE environment variable.
+ * 
+ * Usage:
+ *   import cache from './services/cache.service';
+ *   const value = cache.get('key', 60000);
+ *   cache.set('key', value);
+ * 
+ * To use a different cache:
+ *   Set CACHE_TYPE=redis (or memcached) in your environment
+ *   Note: Redis/Memcached implementations need to be added first
+ */
+import { createCacheService } from './cache/factory';
 
 /**
- * Simple in-memory cache service with TTL support
+ * Singleton cache service instance
+ * Created using the factory based on configuration
+ * Defaults to memory cache if CACHE_TYPE is not specified
  */
-class CacheService {
-  private cache: Map<string, any>;
-  private timestamps: Map<string, number>;
+const cacheService = createCacheService();
 
-  constructor() {
-    this.cache = new Map();
-    this.timestamps = new Map();
-  }
-
-  /**
-   * Get a value from cache
-   * @param key - Cache key
-   * @param ttl - Time to live in milliseconds
-   * @returns Cached value or null if not found/expired
-   */
-  get(key: string, ttl: number): any {
-    if (!this.cache.has(key)) {
-      return null;
-    }
-
-    const timestamp = this.timestamps.get(key);
-    if (timestamp === undefined) {
-      return null;
-    }
-
-    const now = Date.now();
-
-    if (now - timestamp > ttl) {
-      // Expired, remove from cache
-      this.cache.delete(key);
-      this.timestamps.delete(key);
-      logger.debug('Cache expired', { key });
-      return null;
-    }
-
-    logger.debug('Cache hit', { key });
-    return this.cache.get(key);
-  }
-
-  /**
-   * Set a value in cache
-   * @param key - Cache key
-   * @param value - Value to cache
-   */
-  set(key: string, value: any): void {
-    // Implement simple LRU: if cache is full, remove oldest entry
-    if (this.cache.size >= config.cache.maxSize && !this.cache.has(key)) {
-      const oldestKey = this.timestamps.keys().next().value;
-      if (oldestKey) {
-        this.cache.delete(oldestKey);
-        this.timestamps.delete(oldestKey);
-        logger.debug('Cache eviction', { key: oldestKey });
-      }
-    }
-
-    this.cache.set(key, value);
-    this.timestamps.set(key, Date.now());
-    logger.debug('Cache set', { key, size: this.cache.size });
-  }
-
-  /**
-   * Clear entire cache
-   */
-  clear(): void {
-    const size = this.cache.size;
-    this.cache.clear();
-    this.timestamps.clear();
-    logger.info('Cache cleared', { entriesRemoved: size });
-  }
-
-  /**
-   * Get cache statistics
-   */
-  getStats() {
-    return {
-      size: this.cache.size,
-      maxSize: config.cache.maxSize
-    };
-  }
-}
-
-// Export singleton instance
-export default new CacheService();
+export default cacheService;

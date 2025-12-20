@@ -7,8 +7,13 @@ export interface Config {
   mediaDir: string;
   allowedExtensions: string[];
   cache: {
+    type: 'memory' | 'redis' | 'memcached';
     imdbTTL: number;
     maxSize: number;
+    // Redis/Memcached connection options (for future use)
+    host?: string;
+    port?: number;
+    password?: string;
   };
   scanner: {
     interval: string;
@@ -17,7 +22,14 @@ export interface Config {
     temporaryExtensions: string[];
   };
   database: {
+    type: 'sqlite' | 'postgresql' | 'mysql' | 'mariadb';
     path: string;
+    // PostgreSQL/MySQL connection options (for future use)
+    host?: string;
+    port?: number;
+    username?: string;
+    password?: string;
+    database?: string;
   };
   logLevel: string;
   imdb: {
@@ -39,8 +51,13 @@ const config: Config = {
   
   // Cache configuration (for IMDB lookups)
   cache: {
+    type: (process.env.CACHE_TYPE || 'memory') as 'memory' | 'redis' | 'memcached',
     imdbTTL: parseInt(process.env.CACHE_IMDB_TTL || '86400000', 10), // 24 hours in ms
-    maxSize: parseInt(process.env.CACHE_MAX_SIZE || '1000', 10) // Maximum cache entries
+    maxSize: parseInt(process.env.CACHE_MAX_SIZE || '1000', 10), // Maximum cache entries
+    // Redis/Memcached connection options (optional, only used for non-memory caches)
+    host: process.env.CACHE_HOST,
+    port: process.env.CACHE_PORT ? parseInt(process.env.CACHE_PORT, 10) : undefined,
+    password: process.env.CACHE_PASSWORD
   },
   
   // Scanner configuration
@@ -55,7 +72,14 @@ const config: Config = {
   
   // Database configuration
   database: {
-    path: process.env.DB_PATH || './storage/media.db'
+    type: (process.env.DB_TYPE || 'sqlite') as 'sqlite' | 'postgresql' | 'mysql' | 'mariadb',
+    path: process.env.DB_PATH || './storage/media.db',
+    // PostgreSQL/MySQL connection options (optional, only used for non-SQLite databases)
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
+    username: process.env.DB_USERNAME,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
   },
   
   // Logging configuration
