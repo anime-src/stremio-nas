@@ -1,7 +1,7 @@
 import logger from '../../config/logger';
 import config from '../../config';
 import { IDatabaseService } from './interface';
-import { SqliteDatabaseService } from './implementations/sqlite.database.service';
+import { SqliteDatabaseService } from './providers/sqlite.database.service';
 
 export type DatabaseType = 'sqlite' | 'postgresql' | 'mysql' | 'mariadb';
 

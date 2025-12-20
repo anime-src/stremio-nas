@@ -1,7 +1,7 @@
 import logger from '../../config/logger';
 import config from '../../config';
 import { ICacheService } from './interface';
-import { MemoryCacheService } from './implementations/memory.cache.service';
+import { MemoryCacheService } from './providers/memory.cache.service';
 
 export type CacheType = 'memory' | 'redis' | 'memcached';
 

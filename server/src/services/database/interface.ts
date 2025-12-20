@@ -3,7 +3,7 @@ import { WatchFolder, WatchFolderDTO } from '../../types/watch-folder';
 
 /**
  * Database service interface
- * Defines the contract for all database implementations
+ * Defines the contract for all database providers
  */
 export interface IDatabaseService {
   // File operations

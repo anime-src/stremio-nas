@@ -11,11 +11,11 @@
  * 
  * To use a different database:
  *   Set DB_TYPE=postgresql (or mysql, mariadb) in your environment
- *   Note: PostgreSQL/MySQL implementations need to be added first
+ *   Note: PostgreSQL/MySQL providers need to be added first
  */
 import { createDatabaseService } from './database/factory';
 
-/**
+  /**
  * Singleton database service instance
  * Created using the factory based on configuration
  * Defaults to SQLite if DB_TYPE is not specified

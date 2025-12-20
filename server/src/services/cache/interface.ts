@@ -1,6 +1,6 @@
 /**
  * Cache service interface
- * Defines the contract for all cache implementations
+ * Defines the contract for all cache providers
  */
 export interface ICacheService {
   /**

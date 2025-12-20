@@ -10,7 +10,7 @@ export interface WatchFolder {
   allowed_extensions: string[]; // e.g., [".mp4", ".mkv"]
   min_video_size_mb: number;
   temporary_extensions: string[]; // e.g., [".part", ".tmp"]
-  type: 'local' | 'network';
+  type: 'local' | 'network' | 's3';
   username?: string | null;
   password_encrypted?: string | null; // Never returned in API responses
   domain?: string | null;
@@ -30,7 +30,7 @@ export interface WatchFolderDTO {
   allowed_extensions?: string[];
   min_video_size_mb?: number;
   temporary_extensions?: string[];
-  type?: 'local' | 'network';
+  type?: 'local' | 'network' | 's3';
   username?: string;
   password?: string; // Plain text - will be encrypted before storage
   domain?: string;

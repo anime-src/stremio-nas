@@ -12,11 +12,11 @@
  * 
  * To use a different cache:
  *   Set CACHE_TYPE=redis (or memcached) in your environment
- *   Note: Redis/Memcached implementations need to be added first
+ *   Note: Redis/Memcached providers need to be added first
  */
 import { createCacheService } from './cache/factory';
 
-/**
+  /**
  * Singleton cache service instance
  * Created using the factory based on configuration
  * Defaults to memory cache if CACHE_TYPE is not specified

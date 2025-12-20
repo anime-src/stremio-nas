@@ -278,17 +278,16 @@ class WatchFoldersController {
         return;
       }
 
-      // Unmount network path if it's a network folder
-      if (folder.type === 'network') {
-        try {
-          await fileScanner.unmountNetworkPath(id);
-        } catch (error: any) {
-          logger.warn('Failed to unmount network path during deletion', { 
-            id, 
-            error: error.message 
-          });
-          // Continue with deletion even if unmount fails
-        }
+      // Disconnect from storage if provider supports it (e.g., network mounts, S3 connections)
+      try {
+        await fileScanner.disconnectStorage(id);
+      } catch (error: any) {
+        logger.warn('Failed to disconnect storage during deletion', { 
+          id,
+          type: folder.type,
+          error: error.message 
+        });
+        // Continue with deletion even if disconnect fails
       }
 
       // Remove from scheduler
