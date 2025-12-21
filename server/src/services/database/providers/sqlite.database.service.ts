@@ -64,6 +64,7 @@ export class SqliteDatabaseService implements IDatabaseService {
         image TEXT,
         starring TEXT,
         similarity REAL,
+        watch_folder_id INTEGER,
         createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -87,41 +88,10 @@ export class SqliteDatabaseService implements IDatabaseService {
         duration INTEGER NOT NULL,
         errors INTEGER DEFAULT 0,
         processedCount INTEGER DEFAULT 0,
-        skippedCount INTEGER DEFAULT 0
+        skippedCount INTEGER DEFAULT 0,
+        watch_folder_id INTEGER
       );
     `);
-    
-    // Add processedCount and skippedCount columns if they don't exist (migration for existing databases)
-    try {
-      this.db.exec(`ALTER TABLE scans ADD COLUMN processedCount INTEGER DEFAULT 0`);
-      this.db.exec(`ALTER TABLE scans ADD COLUMN skippedCount INTEGER DEFAULT 0`);
-      logger.info('Added processedCount and skippedCount columns to scans table');
-    } catch (e: any) {
-      // Columns already exist, ignore
-      if (!e.message.includes('duplicate column')) {
-        logger.warn('Error adding scan statistics columns', { error: e.message });
-      }
-    }
-
-    // Add watch_folder_id to files table if it doesn't exist (for tracking which folder a file belongs to)
-    try {
-      this.db.exec(`ALTER TABLE files ADD COLUMN watch_folder_id INTEGER`);
-      logger.info('Added watch_folder_id column to files table');
-    } catch (e: any) {
-      if (!e.message.includes('duplicate column')) {
-        logger.warn('Error adding watch_folder_id column to files', { error: e.message });
-      }
-    }
-
-    // Add watch_folder_id to scans table for tracking which folder was scanned (must be before prepared statements)
-    try {
-      this.db.exec(`ALTER TABLE scans ADD COLUMN watch_folder_id INTEGER`);
-      logger.info('Added watch_folder_id column to scans table');
-    } catch (e: any) {
-      if (!e.message.includes('duplicate column')) {
-        logger.warn('Error adding watch_folder_id column to scans', { error: e.message });
-      }
-    }
 
     // Prepare statements (faster than dynamic queries)
     this.stmts = {
@@ -195,26 +165,6 @@ export class SqliteDatabaseService implements IDatabaseService {
       `) as Database.Statement<[]>
     };
 
-    // Add mtime column if it doesn't exist (migration for existing databases)
-    try {
-      this.db.exec(`ALTER TABLE files ADD COLUMN mtime INTEGER DEFAULT 0`);
-      logger.info('Added mtime column to files table');
-    } catch (e: any) {
-      // Column already exists, ignore
-      if (!e.message.includes('duplicate column')) {
-        logger.warn('Error adding mtime column', { error: e.message });
-      }
-    }
-
-    // Remove url column if it exists (migration for existing databases)
-    try {
-      // SQLite doesn't support DROP COLUMN directly, so we'll just ignore it
-      // The column will remain but won't be used
-      logger.info('URL column migration: column will be ignored if present');
-    } catch (e: any) {
-      logger.warn('Error during URL column migration', { error: e.message });
-    }
-
     // Create watch_folders table
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS watch_folders (
@@ -226,6 +176,10 @@ export class SqliteDatabaseService implements IDatabaseService {
         allowed_extensions TEXT NOT NULL,
         min_video_size_mb INTEGER DEFAULT 50,
         temporary_extensions TEXT NOT NULL,
+        type TEXT DEFAULT 'local',
+        username TEXT,
+        password_encrypted TEXT,
+        domain TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -233,21 +187,6 @@ export class SqliteDatabaseService implements IDatabaseService {
       CREATE INDEX IF NOT EXISTS idx_watch_folders_enabled ON watch_folders(enabled);
       CREATE INDEX IF NOT EXISTS idx_watch_folders_path ON watch_folders(path);
     `);
-
-    // Migration: Add network path support columns
-    // Check if columns exist before adding (for existing databases)
-    const tableInfo = this.db.prepare("PRAGMA table_info(watch_folders)").all() as any[];
-    const columnNames = tableInfo.map(col => col.name);
-
-    if (!columnNames.includes('type')) {
-      this.db.exec(`
-        ALTER TABLE watch_folders ADD COLUMN type TEXT DEFAULT 'local';
-        ALTER TABLE watch_folders ADD COLUMN username TEXT;
-        ALTER TABLE watch_folders ADD COLUMN password_encrypted TEXT;
-        ALTER TABLE watch_folders ADD COLUMN domain TEXT;
-      `);
-      logger.info('Added network path support columns to watch_folders table');
-    }
 
     // Create server_settings table
     this.db.exec(`
