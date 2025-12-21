@@ -22,6 +22,35 @@ if (-not $isAdmin) {
 Write-Host "STEP 1: Configuring Windows Firewall Rules..." -ForegroundColor Cyan
 Write-Host ""
 
+# Add firewall rule for Caddy HTTP (port 80) - for Let's Encrypt certificate verification
+# Note: These are for the separate Caddy proxy project (see ./proxy folder)
+try {
+    $existingRule = Get-NetFirewallRule -DisplayName "Stremio NAS Caddy HTTP" -ErrorAction SilentlyContinue
+    if ($existingRule) {
+        Write-Host "  Firewall rule for port 80 already exists. Enabling it..." -ForegroundColor Yellow
+        Enable-NetFirewallRule -DisplayName "Stremio NAS Caddy HTTP"
+    } else {
+        New-NetFirewallRule -DisplayName "Stremio NAS Caddy HTTP" -Direction Inbound -LocalPort 80 -Protocol TCP -Action Allow | Out-Null
+        Write-Host "  [OK] Firewall rule for port 80 (Caddy HTTP) added successfully" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "  [FAIL] Failed to add firewall rule for port 80: $_" -ForegroundColor Red
+}
+
+# Add firewall rule for Caddy HTTPS (port 443) - for HTTPS addon access
+try {
+    $existingRule = Get-NetFirewallRule -DisplayName "Stremio NAS Caddy HTTPS" -ErrorAction SilentlyContinue
+    if ($existingRule) {
+        Write-Host "  Firewall rule for port 443 already exists. Enabling it..." -ForegroundColor Yellow
+        Enable-NetFirewallRule -DisplayName "Stremio NAS Caddy HTTPS"
+    } else {
+        New-NetFirewallRule -DisplayName "Stremio NAS Caddy HTTPS" -Direction Inbound -LocalPort 443 -Protocol TCP -Action Allow | Out-Null
+        Write-Host "  [OK] Firewall rule for port 443 (Caddy HTTPS) added successfully" -ForegroundColor Green
+    }
+} catch {
+    Write-Host "  [FAIL] Failed to add firewall rule for port 443: $_" -ForegroundColor Red
+}
+
 # Add firewall rule for Stremio NAS Addon (port 1222)
 try {
     $existingRule = Get-NetFirewallRule -DisplayName "Stremio NAS Addon" -ErrorAction SilentlyContinue
@@ -91,11 +120,19 @@ try {
         
         # Remove existing port proxies (in case they have old IPs)
         Write-Host "  Removing old port proxies (if any)..." -ForegroundColor Gray
+        netsh interface portproxy delete v4tov4 listenport=80 listenaddress=0.0.0.0 2>$null
+        netsh interface portproxy delete v4tov4 listenport=443 listenaddress=0.0.0.0 2>$null
         netsh interface portproxy delete v4tov4 listenport=1222 listenaddress=0.0.0.0 2>$null
         netsh interface portproxy delete v4tov4 listenport=3001 listenaddress=0.0.0.0 2>$null
         netsh interface portproxy delete v4tov4 listenport=8081 listenaddress=0.0.0.0 2>$null
         
         # Add port proxies
+        netsh interface portproxy add v4tov4 listenport=80 listenaddress=0.0.0.0 connectport=80 connectaddress=$podmanIP
+        Write-Host "  [OK] Port proxy: 0.0.0.0:80 -> ${podmanIP}:80 (Caddy HTTP)" -ForegroundColor Green
+        
+        netsh interface portproxy add v4tov4 listenport=443 listenaddress=0.0.0.0 connectport=443 connectaddress=$podmanIP
+        Write-Host "  [OK] Port proxy: 0.0.0.0:443 -> ${podmanIP}:443 (Caddy HTTPS)" -ForegroundColor Green
+        
         netsh interface portproxy add v4tov4 listenport=1222 listenaddress=0.0.0.0 connectport=1222 connectaddress=$podmanIP
         Write-Host "  [OK] Port proxy: 0.0.0.0:1222 -> ${podmanIP}:1222 (Addon)" -ForegroundColor Green
         
@@ -151,13 +188,15 @@ if ([string]::IsNullOrEmpty($windowsIP)) {
 }
 
 if ($windowsIP) {
-    Write-Host "  Addon:    http://${windowsIP}:1222/manifest.json" -ForegroundColor White
-    Write-Host "  API:      http://${windowsIP}:3001/api/files" -ForegroundColor White
-    Write-Host "  Admin UI: http://${windowsIP}:8081" -ForegroundColor White
+    Write-Host "  Addon (HTTPS): https://<YOUR_DOMAIN>/manifest.json" -ForegroundColor Green
+    Write-Host "  Addon (HTTP):  http://${windowsIP}:1222/manifest.json" -ForegroundColor White
+    Write-Host "  API:           http://${windowsIP}:3001/api/files" -ForegroundColor White
+    Write-Host "  Admin UI:      http://${windowsIP}:8081" -ForegroundColor White
 } else {
-    Write-Host "  Addon:    http://<YOUR_IP>:1222/manifest.json" -ForegroundColor White
-    Write-Host "  API:      http://<YOUR_IP>:3001/api/files" -ForegroundColor White
-    Write-Host "  Admin UI: http://<YOUR_IP>:8081" -ForegroundColor White
+    Write-Host "  Addon (HTTPS): https://<YOUR_DOMAIN>/manifest.json" -ForegroundColor Green
+    Write-Host "  Addon (HTTP):  http://<YOUR_IP>:1222/manifest.json" -ForegroundColor White
+    Write-Host "  API:           http://<YOUR_IP>:3001/api/files" -ForegroundColor White
+    Write-Host "  Admin UI:      http://<YOUR_IP>:8081" -ForegroundColor White
     Write-Host ""
     Write-Host "  To find your IP, run: ipconfig | findstr IPv4" -ForegroundColor Gray
 }

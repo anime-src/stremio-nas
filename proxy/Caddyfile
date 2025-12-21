@@ -1,0 +1,43 @@
+# Caddy Reverse Proxy Configuration
+# Add your domains and services below
+# Caddy automatically gets Let's Encrypt SSL certificates
+
+# ============================================
+# Stremio NAS Addon
+# ============================================
+{$STREMIO_NAS_ADDON_DOMAIN} {
+    reverse_proxy stremio-nas-addon:1222
+    encode gzip
+}
+
+# ============================================
+# Add more services below (examples)
+# ============================================
+
+# Example: Another service on a subdomain
+# api.yourdomain.com {
+#     reverse_proxy your-api-service:3000
+#     encode gzip
+# }
+
+# Example: Admin panel
+# admin.yourdomain.com {
+#     reverse_proxy admin-service:80
+#     encode gzip
+# }
+
+# Example: With basic auth
+# private.yourdomain.com {
+#     basicauth {
+#         admin $2a$14$yourhashedpassword
+#     }
+#     reverse_proxy private-service:8080
+# }
+
+# ============================================
+# Global options (uncomment if needed)
+# ============================================
+# {
+#     email your-email@example.com  # For Let's Encrypt notifications
+# }
+

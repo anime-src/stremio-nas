@@ -1,0 +1,52 @@
+# Caddy Reverse Proxy - Standalone HTTPS Proxy
+# Automatic Let's Encrypt certificates for all your services
+#
+# Usage:
+#   1. Copy env.example to .env and configure your domains
+#   2. Run: docker compose up -d (or podman compose up -d)
+#
+# To connect other Docker Compose projects:
+#   - Add 'networks: proxy-network' to services that need HTTPS
+#   - Use 'external: true' for the network in those projects
+
+services:
+  caddy:
+    image: caddy:alpine
+    container_name: caddy-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"       # HTTP (for Let's Encrypt challenge & redirects)
+      - "443:443"     # HTTPS
+      - "443:443/udp" # HTTP/3 (QUIC)
+    environment:
+      # Domain for Stremio addon (set in .env file)
+      - STREMIO_NAS_ADDON_DOMAIN=${STREMIO_NAS_ADDON_DOMAIN:-stremio.example.com}
+      # Add more domain variables as needed
+      # - API_DOMAIN=${API_DOMAIN:-api.example.com}
+    volumes:
+      # Caddyfile configuration
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persistent data (certificates)
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - proxy-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  caddy_data:
+    # SSL certificates and ACME data
+  caddy_config:
+    # Caddy configuration
+
+networks:
+  proxy-network:
+    name: proxy-network
+    driver: bridge
+    # This network can be used by other Docker Compose projects
+    # Add 'external: true' in other projects to connect

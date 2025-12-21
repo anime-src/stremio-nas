@@ -104,6 +104,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
     networks:
       - media-network
+      - proxy-network  # Connect to external proxy for HTTPS
     depends_on:
       stremio-nas-api:
         condition: service_started # Wait for API container to start
@@ -136,3 +137,7 @@ volumes:
 networks:
   media-network:
     driver: bridge
+  # External proxy network - run the proxy project first to create this network
+  # See ./proxy folder for the Caddy Proxy Manager setup
+  proxy-network:
+    external: true
