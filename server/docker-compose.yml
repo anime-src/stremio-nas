@@ -24,7 +24,8 @@ services:
       # Encryption configuration
       # Generate a secure 32-byte key: openssl rand -hex 32
       # Or use base64: openssl rand -base64 32
-      - ENCRYPTION_KEY=CHANGE_THIS_TO_A_SECURE_32_BYTE_KEY
+      # Or use Node.js: node -p "require('crypto').randomBytes(32).toString('hex')"
+      - ENCRYPTION_KEY=0296b4cb2278594e5242546ba03fc637f6fd8146e4222c7f4d1057f49d59b3e0
       
       # Scanner configuration
       - SCAN_INTERVAL=*/5 * * * * # Cron expression: every 5 minutes

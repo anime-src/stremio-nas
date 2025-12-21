@@ -23,7 +23,7 @@ class StreamController {
     
     try {
       // Lookup file by ID
-      const file = db.getFileById(fileId);
+      const file = await db.getFileById(fileId);
       
       if (!file) {
         logger.warn('File not found', { fileId });
@@ -73,7 +73,7 @@ class StreamController {
     
     try {
       // Lookup file by ID
-      const file = db.getFileById(fileId);
+      const file = await db.getFileById(fileId);
       
       if (!file) {
         logger.warn('File not found', { fileId });

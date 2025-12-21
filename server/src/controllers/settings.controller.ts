@@ -70,7 +70,7 @@ class SettingsController {
       }
 
       // Update setting
-      configService.setSetting(key, String(value));
+      await configService.setSetting(key, String(value));
       logger.info('Updated server setting', { key, value });
 
       res.json({ key, value });
@@ -108,7 +108,7 @@ class SettingsController {
 
       // Update all settings
       for (const [key, value] of Object.entries(settings)) {
-        configService.setSetting(key, String(value));
+        await configService.setSetting(key, String(value));
       }
       logger.info('Bulk updated server settings', { keys: Object.keys(settings) });
 

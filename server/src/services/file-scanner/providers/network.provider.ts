@@ -87,6 +87,26 @@ export class NetworkStorageProvider implements IStorageProvider {
   }
 
   /**
+   * Check if a path is already mounted
+   * @private
+   */
+  private async _isMounted(mountPoint: string): Promise<boolean> {
+    try {
+      // Check /proc/mounts to see if the mount point is already mounted
+      const { stdout } = await execAsync(`grep -q "${mountPoint}" /proc/mounts && echo "mounted" || echo "not_mounted"`);
+      return stdout.trim() === 'mounted';
+    } catch {
+      // If grep fails, check if mount point has contents (indicating it's mounted)
+      try {
+        const entries = await fs.readdir(mountPoint);
+        return entries.length > 0;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  /**
    * Mount network path using CIFS
    * @private
    */
@@ -95,8 +115,23 @@ export class NetworkStorageProvider implements IStorageProvider {
       throw new Error('Watch folder ID is required for network mounting');
     }
 
+    // Mount point: /mnt/network/{watchFolderId}
+    const mountPoint = `/mnt/network/${watchFolder.id}`;
+
+    // Check if already mounted on the filesystem
+    const alreadyMounted = await this._isMounted(mountPoint);
+    if (alreadyMounted) {
+      logger.debug('Network path already mounted on filesystem', {
+        watchFolderId: watchFolder.id,
+        mountPoint
+      });
+      // Update our tracking map
+      this.mountedPaths.set(watchFolder.id, mountPoint);
+      return mountPoint;
+    }
+
     // Get decrypted password
-    const password = db.getDecryptedPassword(watchFolder.id);
+    const password = await db.getDecryptedPassword(watchFolder.id);
     if (!password) {
       throw new Error('Password not available for network path');
     }
@@ -107,9 +142,6 @@ export class NetworkStorageProvider implements IStorageProvider {
     if (!smbPath.startsWith('//')) {
       smbPath = '//' + smbPath.replace(/^\/+/, '');
     }
-
-    // Mount point: /mnt/network/{watchFolderId}
-    const mountPoint = `/mnt/network/${watchFolder.id}`;
 
     try {
       // Create mount point directory

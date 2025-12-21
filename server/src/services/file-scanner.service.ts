@@ -32,7 +32,7 @@ class FileScannerService {
    */
   async scan(watchFolderId: number): Promise<ScanResult> {
     // Get watch folder configuration
-    const watchFolder = db.getWatchFolderById(watchFolderId);
+    const watchFolder = await db.getWatchFolderById(watchFolderId);
     if (!watchFolder) {
       throw new Error(`Watch folder with ID ${watchFolderId} not found`);
     }
@@ -73,11 +73,11 @@ class FileScannerService {
 
       // Step 3: Update database with files that need changes
       if (processResult.filesToUpdate.length > 0) {
-        db.upsertFilesBatch(processResult.filesToUpdate);
+        await db.upsertFilesBatch(processResult.filesToUpdate);
       }
 
       // Step 4: Cleanup - remove files that no longer exist on storage for this watch folder
-      const removedCount = db.removeFilesNotInList(allPaths, watchFolderId);
+      const removedCount = await db.removeFilesNotInList(allPaths, watchFolderId);
 
       if (removedCount > 0) {
         logger.info('Removed deleted files from database', { count: removedCount });
@@ -86,7 +86,7 @@ class FileScannerService {
       const duration = Date.now() - startTime;
 
       // Record scan to history with watch folder ID
-      db.recordScan({
+      await db.recordScan({
         filesFound: allPaths.length,
         duration,
         errors: 0,
@@ -123,7 +123,7 @@ class FileScannerService {
       });
 
       // Record failed scan
-      db.recordScan({
+      await db.recordScan({
         filesFound: 0,
         duration,
         errors: 1,
@@ -152,7 +152,7 @@ class FileScannerService {
    * @param watchFolderId - Watch folder ID
    */
   async disconnectStorage(watchFolderId: number): Promise<void> {
-    const watchFolder = db.getWatchFolderById(watchFolderId);
+    const watchFolder = await db.getWatchFolderById(watchFolderId);
     if (!watchFolder) {
       throw new Error(`Watch folder with ID ${watchFolderId} not found`);
     }
@@ -187,7 +187,7 @@ class FileScannerService {
 
     for (const rawFile of rawFiles) {
       // Check if file exists in database
-      const existingFile = db.getFileByPath(rawFile.path);
+      const existingFile = await db.getFileByPath(rawFile.path);
 
       // Check if file is unchanged
       if (

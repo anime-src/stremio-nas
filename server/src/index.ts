@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import createApp from './app';
 import config from './config';
 import logger from './config/logger';
@@ -69,11 +70,11 @@ async function startServer(): Promise<Server> {
   server.headersTimeout = 66000; // Slightly higher than keepAlive (66s)
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     logger.info('Shutdown signal received, shutting down gracefully');
     scheduler.stop();
-    server.close(() => {
-      db.close();
+    server.close(async () => {
+      await db.close();
       logger.info('Server closed');
       process.exit(0);
     });

@@ -26,8 +26,9 @@ FROM node:lts-alpine
 WORKDIR /app
 
 # Install build dependencies for native modules (better-sqlite3)
-# Install cifs-utils for SMB/UNC path mounting
-RUN apk add --no-cache python3 make g++ cifs-utils
+# Install cifs-utils and keyutils for SMB/UNC path mounting
+# Note: smbclient is not available in Alpine, but cifs-utils provides mount.cifs which is sufficient
+RUN apk add --no-cache python3 make g++ cifs-utils keyutils
 
 # Copy package files
 COPY package*.json ./
@@ -42,10 +43,12 @@ COPY --from=builder /app/dist ./dist
 # Note: Network mounts require root privileges (CAP_SYS_ADMIN capability)
 # The /mnt/network directory will be created, but mounting requires root
 # Users can either: 1) Run container as root, or 2) Add CAP_SYS_ADMIN capability
-RUN mkdir -p /app/storage /mnt/network && chown -R node:node /app && chmod 777 /mnt/network
+RUN mkdir -p /app/storage /mnt/network && chown -R node:node /app && chmod 777 /mnt/network && chmod 777 /mnt
 
-# Use the node user that already exists in the image (UID 1000)
-USER node
+# Note: For network mounting to work, container must run as root
+# CIFS mounting requires root privileges even with CAP_SYS_ADMIN
+# Running as root is required for mount command to work
+USER root
 
 # Expose port
 EXPOSE 3000

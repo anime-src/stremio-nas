@@ -55,7 +55,7 @@ class WatchFoldersController {
    */
   async listWatchFolders(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const folders = db.getAllWatchFolders();
+      const folders = await db.getAllWatchFolders();
       const status = scheduler.getStatus();
       
       // Add scanning status to each folder and sanitize
@@ -87,7 +87,7 @@ class WatchFoldersController {
         return;
       }
 
-      const folder = db.getWatchFolderById(id);
+      const folder = await db.getWatchFolderById(id);
       if (!folder) {
         res.status(404).json({ error: 'Watch folder not found' });
         return;
@@ -147,14 +147,14 @@ class WatchFoldersController {
       }
 
       // Check if path already exists
-      const existing = db.getWatchFolderByPath(data.path);
+      const existing = await db.getWatchFolderByPath(data.path);
       if (existing) {
         res.status(409).json({ error: 'Watch folder with this path already exists' });
         return;
       }
 
       // Create watch folder
-      const folder = db.createWatchFolder(data);
+      const folder = await db.createWatchFolder(data);
 
       // Add to scheduler if enabled
       if (folder.enabled) {
@@ -185,7 +185,7 @@ class WatchFoldersController {
       const data: Partial<WatchFolderDTO> = req.body;
 
       // Get existing folder to check current type
-      const existing = db.getWatchFolderById(id);
+      const existing = await db.getWatchFolderById(id);
       if (!existing) {
         res.status(404).json({ error: 'Watch folder not found' });
         return;
@@ -231,7 +231,7 @@ class WatchFoldersController {
 
       // Check if path already exists (if changing path)
       if (data.path) {
-        const pathExisting = db.getWatchFolderByPath(data.path);
+        const pathExisting = await db.getWatchFolderByPath(data.path);
         if (pathExisting && pathExisting.id !== id) {
           res.status(409).json({ error: 'Watch folder with this path already exists' });
           return;
@@ -239,7 +239,7 @@ class WatchFoldersController {
       }
 
       // Update watch folder
-      const folder = db.updateWatchFolder(id, data);
+      const folder = await db.updateWatchFolder(id, data);
       if (!folder) {
         res.status(404).json({ error: 'Watch folder not found' });
         return;
@@ -272,7 +272,7 @@ class WatchFoldersController {
         return;
       }
 
-      const folder = db.getWatchFolderById(id);
+      const folder = await db.getWatchFolderById(id);
       if (!folder) {
         res.status(404).json({ error: 'Watch folder not found' });
         return;
@@ -294,7 +294,7 @@ class WatchFoldersController {
       scheduler.removeWatchFolder(id);
 
       // Delete from database
-      const deleted = db.deleteWatchFolder(id);
+      const deleted = await db.deleteWatchFolder(id);
       if (!deleted) {
         res.status(500).json({ error: 'Failed to delete watch folder' });
         return;
@@ -320,7 +320,7 @@ class WatchFoldersController {
         return;
       }
 
-      const folder = db.getWatchFolderById(id);
+      const folder = await db.getWatchFolderById(id);
       if (!folder) {
         res.status(404).json({ error: 'Watch folder not found' });
         return;
@@ -339,7 +339,7 @@ class WatchFoldersController {
       const result = await scheduler.triggerScan(id);
 
       // Get updated stats
-      const stats = db.getStats();
+      const stats = await db.getStats();
 
       res.json({ 
         message: 'File scan completed successfully',
@@ -377,14 +377,14 @@ class WatchFoldersController {
         return;
       }
 
-      const folder = db.getWatchFolderById(id);
+      const folder = await db.getWatchFolderById(id);
       if (!folder) {
         res.status(404).json({ error: 'Watch folder not found' });
         return;
       }
 
       // Get scan history for this watch folder
-      const allScans = db.getScanHistory(100);
+      const allScans = await db.getScanHistory(100);
       const folderScans = allScans.filter(scan => scan.watch_folder_id === id);
 
       const sanitized = this.sanitizeWatchFolder(folder);

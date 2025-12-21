@@ -28,28 +28,28 @@ class FilesController {
       let files;
       if (req.validatedImdbId) {
         // Filter by IMDB ID in database query (most efficient, exact match)
-        files = db.getFilesByImdbId(req.validatedImdbId);
+        files = await db.getFilesByImdbId(req.validatedImdbId);
         logger.debug('Files filtered by IMDB ID', { 
           imdb_id: req.validatedImdbId, 
           count: files.length 
         });
       } else if (req.validatedName) {
         // Filter by name in database query (partial match)
-        files = db.searchFilesByName(req.validatedName);
+        files = await db.searchFilesByName(req.validatedName);
         logger.debug('Files filtered by name', { 
           name: req.validatedName, 
           count: files.length 
         });
       } else if (req.validatedExt) {
         // Filter by extension in database query
-        files = db.filterByExtension(req.validatedExt);
+        files = await db.filterByExtension(req.validatedExt);
         logger.debug('Files filtered by extension', { 
           extension: req.validatedExt, 
           count: files.length 
         });
       } else {
         // Get all files
-        files = db.getAllFiles();
+        files = await db.getAllFiles();
       }
       
       const duration = Date.now() - startTime;
@@ -113,7 +113,7 @@ class FilesController {
       }
       
       // Get updated count from database
-      const stats = db.getStats();
+      const stats = await db.getStats();
       
       res.json({ 
         message: 'File scans completed',
@@ -138,9 +138,9 @@ class FilesController {
    * Get database statistics
    * @route GET /files/stats
    */
-  getStats(_req: Request, res: Response): void {
+  async getStats(_req: Request, res: Response): Promise<void> {
     try {
-      const stats = db.getStats();
+      const stats = await db.getStats();
       const schedulerStatus = scheduler.getStatus();
       
       res.json({
@@ -161,10 +161,10 @@ class FilesController {
    * Get scan history
    * @route GET /files/scan-history
    */
-  getScanHistory(req: Request, res: Response): void {
+  async getScanHistory(req: Request, res: Response): Promise<void> {
     try {
       const limit = parseInt(req.query.limit as string, 10) || 10;
-      const history = db.getScanHistory(limit);
+      const history = await db.getScanHistory(limit);
       
       res.json({ history });
     } catch (err: any) {

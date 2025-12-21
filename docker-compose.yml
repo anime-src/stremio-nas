@@ -3,33 +3,46 @@ services:
     build: ./server
     container_name: stremio-nas-api
     restart: unless-stopped
+    # Network/UNC path mounting requires root privileges or CAP_SYS_ADMIN capability
+    # For Podman, you may need to use privileged mode or run as root
+    # Option 1: Use privileged mode (works with Podman, less secure)
+    privileged: true
+    # Option 2: Use capabilities (works with Docker, may not work with Podman)
+    # cap_add:
+    #   - SYS_ADMIN
+    # Option 3: Run as root (modify Dockerfile USER directive)
+    # user: root
     ports:
-      - "3001:3000" # Map host port 3001 to container port 3000
+      - "${API_PORT:-3001}:3000" # Map host port to container port 3000
     environment:
       # Server configuration
       - PORT=3000
-      - MEDIA_DIR=/data/videos
+      - MEDIA_DIR=${MEDIA_DIR:-/data/videos}
       
       # File filtering
-      - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
+      - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-.mp4,.mkv,.avi}
       
       # Database configuration
-      - DB_PATH=/app/storage/media.db
+      - DB_PATH=${DB_PATH:-/app/storage/media.db}
       
-      # API configuration
-      - API_HOST=http://localhost:3001 # IMPORTANT: Update with your NAS IP and mapped port
+      # API configuration - IMPORTANT: Set HOST_IP in .env file
+      - API_HOST=http://${HOST_IP:-localhost}:${API_PORT:-3001}
       
       # Scanner configuration
-      - SCAN_INTERVAL=*/5 * * * * # Cron expression: every 5 minutes
-      - SCAN_ON_STARTUP=true # Run scan on server startup
-      - MIN_VIDEO_SIZE_MB=50 # Minimum video file size in MB
+      - SCAN_INTERVAL=${SCAN_INTERVAL:-*/5 * * * *}
+      - SCAN_ON_STARTUP=${SCAN_ON_STARTUP:-true}
+      - MIN_VIDEO_SIZE_MB=${MIN_VIDEO_SIZE_MB:-50}
       
       # Cache configuration
-      - CACHE_IMDB_TTL=86400000 # IMDB cache TTL in milliseconds (24 hours)
-      - CACHE_MAX_SIZE=1000 # Maximum cache entries
+      - CACHE_IMDB_TTL=${CACHE_IMDB_TTL:-86400000}
+      - CACHE_MAX_SIZE=${CACHE_MAX_SIZE:-1000}
       
       # Logging
-      - LOG_LEVEL=info # Options: error, warn, info, debug
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      
+      # Encryption key for password encryption (32 bytes = 64 hex characters)
+      # Generate a new key: node -p "require('crypto').randomBytes(32).toString('hex')"
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-CHANGE_ME_GENERATE_A_SECURE_KEY}
     volumes:
       # For Linux/Unix systems (e.g., Synology NAS):
       # - /volume1/video:/data/videos:ro
@@ -66,7 +79,7 @@ services:
     container_name: stremio-nas-addon
     restart: unless-stopped
     ports:
-      - "1222:1222" # Map host port 1222 to container port 1222
+      - "${ADDON_PORT:-1222}:1222" # Map host port to container port 1222
     environment:
       # Internal URL: Addon connects to API server to fetch file list
       # Use Docker service name for internal communication
@@ -75,20 +88,20 @@ services:
       - MEDIA_API_URL=http://stremio-nas-api:3000
       
       # External URL: Base URL for stream URLs that Stremio will use to play videos
-      # Must be accessible from wherever Stremio is running (use your NAS IP)
-      - STREAM_BASE_URL=http://localhost:3001
+      # Must be accessible from wherever Stremio is running (use your LAN IP)
+      - STREAM_BASE_URL=http://${HOST_IP:-localhost}:${API_PORT:-3001}
       # Backward compatibility (deprecated, use STREAM_BASE_URL)
-      - API_HOST=http://localhost:3001
+      - API_HOST=http://${HOST_IP:-localhost}:${API_PORT:-3001}
       
       # Addon configuration
       - PORT=1222
       
       # Polling configuration
-      - POLL_INTERVAL_MINUTES=5 # Poll API every 5 minutes for file updates
-      - ENABLE_POLLING=true # Set to false to disable periodic polling
+      - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+      - ENABLE_POLLING=${ENABLE_POLLING:-true}
       
       # Logging
-      - LOG_LEVEL=debug
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     networks:
       - media-network
     depends_on:
@@ -100,7 +113,10 @@ services:
     container_name: stremio-nas-admin
     restart: unless-stopped
     ports:
-      - "8081:80" # Map host port 8081 to container port 80
+      - "${ADMIN_PORT:-8081}:80" # Map host port to container port 80
+    environment:
+      # API URL for admin UI to connect to
+      - API_URL=http://${HOST_IP:-localhost}:${API_PORT:-3001}
     networks:
       - media-network
     depends_on:

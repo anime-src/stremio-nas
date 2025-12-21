@@ -21,16 +21,16 @@ class ConfigService {
 
     try {
       // Load watch folders
-      this.watchFolders = db.getAllWatchFolders();
+      this.watchFolders = await db.getAllWatchFolders();
       logger.info('Loaded watch folders from database', { count: this.watchFolders.length });
 
       // Load server settings
-      this.serverSettings = db.getAllSettings();
+      this.serverSettings = await db.getAllSettings();
       logger.info('Loaded server settings from database', { count: Object.keys(this.serverSettings).length });
 
       // Initialize default settings if database is empty
       if (Object.keys(this.serverSettings).length === 0) {
-        this._initializeDefaultSettings();
+        await this._initializeDefaultSettings();
       }
 
       // Create default watch folder from env var if none exist
@@ -49,7 +49,7 @@ class ConfigService {
    * Initialize default server settings
    * @private
    */
-  private _initializeDefaultSettings(): void {
+  private async _initializeDefaultSettings(): Promise<void> {
     const defaults: Record<string, string> = {
       logLevel: config.logLevel || 'info',
       cacheImdbTTL: String(config.cache.imdbTTL || 86400000),
@@ -57,7 +57,7 @@ class ConfigService {
       scanOnStartup: config.scanner.onStartup !== false ? 'true' : 'false'
     };
 
-    db.setSettings(defaults);
+    await db.setSettings(defaults);
     this.serverSettings = { ...defaults };
     logger.info('Initialized default server settings');
   }
@@ -68,7 +68,7 @@ class ConfigService {
    */
   private async _createDefaultWatchFolder(): Promise<void> {
     try {
-      const defaultFolder = db.createWatchFolder({
+      const defaultFolder = await db.createWatchFolder({
         path: config.mediaDir,
         name: 'Default Watch Folder',
         enabled: true,
@@ -112,8 +112,8 @@ class ConfigService {
   /**
    * Refresh watch folders from database
    */
-  refreshWatchFolders(): void {
-    this.watchFolders = db.getAllWatchFolders();
+  async refreshWatchFolders(): Promise<void> {
+    this.watchFolders = await db.getAllWatchFolders();
     logger.debug('Refreshed watch folders from database', { count: this.watchFolders.length });
   }
 
@@ -134,8 +134,8 @@ class ConfigService {
   /**
    * Set a server setting (updates both cache and database)
    */
-  setSetting(key: string, value: string): void {
-    db.setSetting(key, value);
+  async setSetting(key: string, value: string): Promise<void> {
+    await db.setSetting(key, value);
     this.serverSettings[key] = value;
     logger.debug('Updated server setting', { key, value });
   }
@@ -143,8 +143,8 @@ class ConfigService {
   /**
    * Refresh server settings from database
    */
-  refreshSettings(): void {
-    this.serverSettings = db.getAllSettings();
+  async refreshSettings(): Promise<void> {
+    this.serverSettings = await db.getAllSettings();
     logger.debug('Refreshed server settings from database');
   }
 
