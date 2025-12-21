@@ -16,7 +16,8 @@ const router = Router();
  *   get:
  *     summary: Health check endpoint
  *     tags: [Health]
- *     description: Returns the health status of the API server
+ *     description: Returns the health status of the API server. This endpoint does not require API key authentication.
+ *     security: []
  *     responses:
  *       200:
  *         description: Server is healthy

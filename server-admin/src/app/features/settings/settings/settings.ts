@@ -2,6 +2,7 @@ import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/services/api.service';
+import { ApiKeyService } from '../../../core/services/api-key.service';
 import { ServerSettings } from '../../../core/models/settings.model';
 
 @Component({
@@ -19,11 +20,44 @@ export class SettingsComponent implements OnInit {
   saving = signal<boolean>(false);
 
   logLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
+  apiKey = signal<string>('');
+  showApiKey = signal<boolean>(false);
 
-  constructor(private apiService: ApiService) {}
+  constructor(
+    private apiService: ApiService,
+    private apiKeyService: ApiKeyService
+  ) {}
 
   ngOnInit(): void {
     this.loadSettings();
+    this.loadApiKey();
+  }
+
+  loadApiKey(): void {
+    const key = this.apiKeyService.getApiKey();
+    this.apiKey.set(key || '');
+  }
+
+  saveApiKey(): void {
+    const key = this.apiKey().trim();
+    this.apiKeyService.setApiKey(key || null);
+    this.success.set('API key saved successfully');
+    setTimeout(() => {
+      this.success.set(null);
+    }, 3000);
+  }
+
+  clearApiKey(): void {
+    this.apiKey.set('');
+    this.apiKeyService.clearApiKey();
+    this.success.set('API key cleared');
+    setTimeout(() => {
+      this.success.set(null);
+    }, 3000);
+  }
+
+  toggleApiKeyVisibility(): void {
+    this.showApiKey.update((val) => !val);
   }
 
   loadSettings(): void {

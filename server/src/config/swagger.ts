@@ -12,6 +12,14 @@ const options = {
       },
     },
     components: {
+      securitySchemes: {
+        ApiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key',
+          description: 'API key for authentication. Required if API_KEY environment variable is set.',
+        },
+      },
       schemas: {
         File: {
           type: 'object',
@@ -271,6 +279,11 @@ const options = {
         },
       },
     },
+    security: [
+      {
+        ApiKeyAuth: [],
+      },
+    ],
     tags: [
       {
         name: 'Health',

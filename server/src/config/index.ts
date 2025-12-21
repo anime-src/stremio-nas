@@ -6,6 +6,7 @@ export interface Config {
   host: string;
   mediaDir: string;
   allowedExtensions: string[];
+  apiKey?: string;
   cache: {
     type: 'memory' | 'redis' | 'memcached';
     imdbTTL: number;
@@ -42,6 +43,9 @@ const config: Config = {
   // Server configuration
   port: parseInt(process.env.PORT || '3000', 10),
   host: '0.0.0.0',
+  
+  // API key configuration (optional - if not set, authentication is disabled)
+  apiKey: process.env.API_KEY,
   
   // Media directory configuration
   mediaDir: process.env.MEDIA_DIR || '/data/videos',
