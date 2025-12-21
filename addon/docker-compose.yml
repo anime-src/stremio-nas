@@ -18,6 +18,10 @@ services:
       # Backward compatibility (deprecated, use STREAM_BASE_URL)
       - API_HOST=http://localhost:3001
       
+      # API Key for authentication (optional - required if server has API_KEY configured)
+      # Must match the API_KEY set in the server environment
+      - API_KEY=
+      
       # Addon configuration
       - PORT=1222
       

@@ -21,17 +21,37 @@ async function fetchFiles(options = {}) {
 	const queryString = queryParams.toString()
 	const url = `${apiUrl}/api/files${queryString ? '?' + queryString : ''}`
 
+	// Prepare headers with API key if configured
+	const headers = {}
+	if (config.apiKey) {
+		headers['X-API-Key'] = config.apiKey
+	}
+
 	for (let attempt = 1; attempt <= maxRetries; attempt++) {
 		try {
 			logger.debug('Fetching files from API', { 
 				attempt, 
 				maxRetries, 
 				apiUrl,
-				imdb_id: options.imdb_id || 'all'
+				imdb_id: options.imdb_id || 'all',
+				hasApiKey: !!config.apiKey
 			})
-			const response = await fetch(url)
+			const response = await fetch(url, {
+				headers
+			})
 
 			if (!response.ok) {
+				// Handle 401 Unauthorized (API key missing or invalid)
+				if (response.status === 401) {
+					const errorBody = await response.text().catch(() => '')
+					logger.error('API authentication failed', {
+						status: response.status,
+						statusText: response.statusText,
+						body: errorBody,
+						hasApiKey: !!config.apiKey
+					})
+					throw new Error(`API authentication failed: ${response.status} ${response.statusText}. ${config.apiKey ? 'API key may be invalid.' : 'API key is required but not configured.'}`)
+				}
 				throw new Error(`API request failed: ${response.status} ${response.statusText}`)
 			}
 

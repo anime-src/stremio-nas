@@ -12,6 +12,9 @@ module.exports = {
 	// Must be accessible from wherever Stremio is running
 	streamBaseUrl: process.env.STREAM_BASE_URL || process.env.API_HOST || 'http://localhost:3001',
 	
+	// API Key for authentication (optional - required if server has API_KEY configured)
+	apiKey: process.env.API_KEY || null,
+	
 	// Server Configuration
 	port: parseInt(process.env.PORT, 10) || 1222,
 	

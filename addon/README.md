@@ -45,6 +45,9 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
      # External URL: Stremio uses this to stream videos
      - STREAM_BASE_URL=http://localhost:3001  # Use your NAS IP here
      
+     # API Key (required if server has API_KEY configured)
+     - API_KEY=your-api-key-here  # Must match server's API_KEY
+     
      # Polling configuration
      - POLL_INTERVAL_MINUTES=5  # Poll every 5 minutes
      - ENABLE_POLLING=true       # Enable automatic updates
@@ -84,6 +87,7 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
    ```bash
    export API_INTERNAL_URL=http://your-server-ip:3000
    export STREAM_BASE_URL=http://your-server-ip:3001
+   export API_KEY=your-api-key-here  # Required if server has API_KEY configured
    export POLL_INTERVAL_MINUTES=5
    export ENABLE_POLLING=true
    ```
@@ -92,6 +96,7 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
    ```cmd
    set API_INTERNAL_URL=http://your-server-ip:3000
    set STREAM_BASE_URL=http://your-server-ip:3001
+   set API_KEY=your-api-key-here
    set POLL_INTERVAL_MINUTES=5
    set ENABLE_POLLING=true
    ```
@@ -111,6 +116,7 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
 |----------|---------|-------------|
 | `API_INTERNAL_URL` | `http://localhost:3000` | Internal URL for addon to fetch files from API server (use Docker service name or external URL). Also accepts `MEDIA_API_URL` for backward compatibility. |
 | `STREAM_BASE_URL` | `http://localhost:3001` | External base URL for stream URLs that Stremio will use to play videos (must be accessible from Stremio). Also accepts `API_HOST` for backward compatibility. |
+| `API_KEY` | *(none)* | API key for authenticating requests to the server. Required if the server has `API_KEY` configured. Must match the server's API key. |
 | `PORT` | `1222` | Port for the Stremio addon HTTP server |
 | `LOG_LEVEL` | `debug` | Logging level: `error`, `warn`, `info`, `debug` |
 | `POLL_INTERVAL_MINUTES` | `5` | Interval to poll API for file updates (in minutes) |
@@ -274,6 +280,15 @@ The addon expects the Stremio NAS API to return files in this format:
 3. **Check Network**: Ensure addon machine can reach the server IP
 4. **Check Firewall**: Ensure port 3001 (or your mapped port) is accessible
 5. **Docker Network**: If using Docker, ensure both containers are on the same network (`media-network`)
+
+### API Authentication Failed (401 Unauthorized)
+
+If you see authentication errors in the logs:
+
+1. **Check if server requires API key**: Verify if the server has `API_KEY` environment variable set
+2. **Configure API key**: Set `API_KEY` environment variable in addon's `docker-compose.yml` or environment
+3. **Verify API key matches**: The API key in the addon must exactly match the `API_KEY` set in the server
+4. **Check logs**: Look for "API authentication failed" messages in addon logs for more details
 6. **Service Name**: In Docker, use service name `stremio-nas-api` for `API_INTERNAL_URL`
 7. **Polling**: Check addon logs for "Files fetched from API" messages (should appear every N minutes)
 
