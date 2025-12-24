@@ -75,7 +75,7 @@ class PollingService {
 		logger.debug('Starting file fetch', { type })
 
 		try {
-			const files = await this.fetchFiles(this.config.apiInternalUrl)
+			const files = await this.fetchFiles()
 			const duration = Date.now() - startTime
 			
 			logger.info('Files fetched from API', { 
@@ -99,7 +99,7 @@ class PollingService {
 			logger.error('Error fetching files from API', { 
 				error: err.message,
 				type,
-				apiUrl: this.config.apiInternalUrl
+				apiUrl: this.config.apiUrl
 			})
 			throw err
 		}

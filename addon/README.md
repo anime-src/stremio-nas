@@ -39,11 +39,9 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
    Edit `docker-compose.yml` (in project root) and set environment variables:
    ```yaml
    environment:
-     # Internal URL: Addon connects to API server
-     - API_INTERNAL_URL=http://stremio-nas-api:3000  # Use Docker service name
-     
-     # External URL: Stremio uses this to stream videos
-     - STREAM_BASE_URL=http://localhost:3001  # Use your NAS IP here
+     # URL for addon to connect to API server (also used for stream URLs)
+     # Use Docker service name or external URL (must be accessible from Stremio)
+     - API_URL=http://stremio-nas-api:3000
      
      # API Key (required if server has API_KEY configured)
      - API_KEY=your-api-key-here  # Must match server's API_KEY
@@ -83,10 +81,9 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
    ```
 
 2. **Configure environment variables**:
-   Set the API URLs and polling configuration:
+   Set the API URL and polling configuration:
    ```bash
-   export API_INTERNAL_URL=http://your-server-ip:3000
-   export STREAM_BASE_URL=http://your-server-ip:3001
+   export API_URL=http://your-server-ip:3000
    export API_KEY=your-api-key-here  # Required if server has API_KEY configured
    export POLL_INTERVAL_MINUTES=5
    export ENABLE_POLLING=true
@@ -94,8 +91,7 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
    
    Or on Windows:
    ```cmd
-   set API_INTERNAL_URL=http://your-server-ip:3000
-   set STREAM_BASE_URL=http://your-server-ip:3001
+   set API_URL=http://your-server-ip:3000
    set API_KEY=your-api-key-here
    set POLL_INTERVAL_MINUTES=5
    set ENABLE_POLLING=true
@@ -114,8 +110,7 @@ A Stremio add-on that connects to the Stremio NAS API server to list and stream 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_INTERNAL_URL` | `http://localhost:3000` | Internal URL for addon to fetch files from API server (use Docker service name or external URL). Also accepts `MEDIA_API_URL` for backward compatibility. |
-| `STREAM_BASE_URL` | `http://localhost:3001` | External base URL for stream URLs that Stremio will use to play videos (must be accessible from Stremio). Also accepts `API_HOST` for backward compatibility. |
+| `API_URL` | `http://localhost:3000` | URL for addon to connect to API server and base URL for stream URLs (can be Docker service name or external URL, must be accessible from Stremio) |
 | `API_KEY` | *(none)* | API key for authenticating requests to the server. Required if the server has `API_KEY` configured. Must match the server's API key. |
 | `PORT` | `1222` | Port for the Stremio addon HTTP server |
 | `LOG_LEVEL` | `debug` | Logging level: `error`, `warn`, `info`, `debug` |
@@ -137,8 +132,7 @@ For a server at IP `192.168.1.100` with API on port 3001:
 **Docker (in docker-compose.yml):**
 ```yaml
 environment:
-  - API_INTERNAL_URL=http://stremio-nas-api:3000  # Internal Docker network
-  - STREAM_BASE_URL=http://192.168.1.100:3001     # External URL for Stremio
+  - API_URL=http://192.168.1.100:3000  # External URL accessible from Stremio
   - PORT=1222
   - POLL_INTERVAL_MINUTES=5                        # Poll every 5 minutes
   - ENABLE_POLLING=true                            # Enable automatic updates
@@ -147,8 +141,7 @@ environment:
 
 **Local Node.js:**
 ```bash
-export API_INTERNAL_URL=http://192.168.1.100:3001
-export STREAM_BASE_URL=http://192.168.1.100:3001
+export API_URL=http://192.168.1.100:3000
 export PORT=1222
 export POLL_INTERVAL_MINUTES=5
 npm start
@@ -172,7 +165,7 @@ services:
       - PORT=3000
       - MEDIA_DIR=/data/videos
       - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
-      - API_HOST=http://localhost:3001
+      - API_INTERNAL_URL=http://localhost:3001
       - LOG_LEVEL=info
     volumes:
       - /volume1/video:/data/videos:ro
@@ -186,11 +179,9 @@ services:
     ports:
       - "1222:1222"
     environment:
-      # Internal URL for fetching files
-      - API_INTERNAL_URL=http://stremio-nas-api:3000
-      
-      # External URL for streaming (use your NAS IP)
-      - STREAM_BASE_URL=http://localhost:3001
+      # URL for addon to connect to API server (also used for stream URLs)
+      # Use Docker service name or external URL accessible from Stremio
+      - API_URL=http://stremio-nas-api:3000
       
       # Polling configuration
       - POLL_INTERVAL_MINUTES=5
@@ -218,7 +209,7 @@ networks:
 5. **Catalog Generation**: Each IMDB ID becomes a catalog item using lightweight index data (fast)
 6. **On-Demand Fetching**: When Stremio requests metadata or streams, the addon fetches full file details from API (with LRU caching)
 7. **Metadata Enrichment**: Stream titles include resolution, codec, source, release group, and file size (fetched from full details)
-8. **Streaming**: The addon constructs HTTP URLs using file ID (`{STREAM_BASE_URL}/stream/{id}`)
+8. **Streaming**: The addon constructs HTTP URLs using file ID (`{API_URL}/api/stream/{id}`)
 9. **Caching**: Frequently accessed file details and metadata are cached in LRU caches (1000 items, 30min TTL)
 10. **No Filesystem Access**: All file operations happen on the Stremio NAS API server, not on the addon machine
 
@@ -269,13 +260,13 @@ The addon expects the Stremio NAS API to return files in this format:
 - `GET /files`: Fetch all files for periodic polling
 - `GET /files?imdb_id=tt1234567`: Fetch files for a specific IMDB ID (on-demand)
 
-**Note**: Stream URLs are constructed by the addon using the `id` field: `{STREAM_BASE_URL}/stream/{id}`. The API no longer returns a `url` field.
+**Note**: Stream URLs are constructed by the addon using the `id` field: `{API_URL}/api/stream/{id}`. The API no longer returns a `url` field.
 
 ## Troubleshooting
 
 ### Addon Can't Connect to API
 
-1. **Check API URL**: Verify `API_INTERNAL_URL` is set correctly (use Docker service name for internal communication)
+1. **Check API URL**: Verify `API_URL` is set correctly (use Docker service name for internal communication)
 2. **Test API**: Try `curl http://your-server-ip:3001/files` to verify API is running
 3. **Check Network**: Ensure addon machine can reach the server IP
 4. **Check Firewall**: Ensure port 3001 (or your mapped port) is accessible
@@ -289,7 +280,7 @@ If you see authentication errors in the logs:
 2. **Configure API key**: Set `API_KEY` environment variable in addon's `docker-compose.yml` or environment
 3. **Verify API key matches**: The API key in the addon must exactly match the `API_KEY` set in the server
 4. **Check logs**: Look for "API authentication failed" messages in addon logs for more details
-6. **Service Name**: In Docker, use service name `stremio-nas-api` for `API_INTERNAL_URL`
+6. **Service Name**: In Docker, use service name `stremio-nas-api` for `API_URL`
 7. **Polling**: Check addon logs for "Files fetched from API" messages (should appear every N minutes)
 
 ### No Files Appearing in Stremio
@@ -302,11 +293,11 @@ If you see authentication errors in the logs:
 
 ### Streaming Not Working
 
-1. **Check Stream URL**: Verify the addon constructs URLs correctly (uses `STREAM_BASE_URL` environment variable)
-2. **Test Stream Directly**: Try opening `http://your-nas-ip:3001/stream/1` in a browser or VLC (use file ID from `/files` response)
+1. **Check Stream URL**: Verify the addon constructs URLs correctly (uses `API_URL` environment variable)
+2. **Test Stream Directly**: Try opening `http://your-nas-ip:3000/api/stream/1` in a browser or VLC (use file ID from `/files` response)
 3. **Check Range Support**: Ensure API supports Range headers (required for seeking)
 4. **Check Network**: Ensure Stremio can reach the NAS IP and port
-5. **Check STREAM_BASE_URL**: Verify `STREAM_BASE_URL` is set to the external accessible URL (must be reachable from Stremio)
+5. **Check API_URL**: Verify `API_URL` is set to an external accessible URL (must be reachable from Stremio)
 6. **Check Metadata**: Verify stream titles show resolution/codec (indicates on-demand fetch is working)
 
 ### Port Already in Use
@@ -333,8 +324,7 @@ Then update the addon URL in Stremio to: `http://localhost:1223/manifest.json`
 
 2. **Set environment variables**:
    ```bash
-   export API_INTERNAL_URL=http://localhost:3000
-   export STREAM_BASE_URL=http://localhost:3001
+   export API_URL=http://localhost:3000
    export POLL_INTERVAL_MINUTES=1  # Fast polling for testing
    export LOG_LEVEL=debug
    ```

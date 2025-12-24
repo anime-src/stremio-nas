@@ -5,12 +5,9 @@
 
 module.exports = {
 	// API Configuration
-	// Internal URL for addon to connect to API server (can be Docker service name or external URL)
-	apiInternalUrl: process.env.API_INTERNAL_URL || process.env.MEDIA_API_URL || 'http://localhost:3000',
-	
-	// External base URL for stream URLs that Stremio will use to play videos
-	// Must be accessible from wherever Stremio is running
-	streamBaseUrl: process.env.STREAM_BASE_URL || process.env.API_HOST || 'http://localhost:3001',
+	// URL for addon to connect to API server (can be Docker service name or external URL)
+	// Also used as base URL for stream URLs that Stremio will use to play videos
+	apiUrl: process.env.API_URL || 'http://localhost:3000',
 	
 	// API Key for authentication (optional - required if server has API_KEY configured)
 	apiKey: process.env.API_KEY || null,

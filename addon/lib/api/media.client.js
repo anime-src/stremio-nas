@@ -9,7 +9,7 @@ const config = require('../config')
  * @returns {Promise<Array>} - Array of file objects
  */
 async function fetchFiles(options = {}) {
-	const apiUrl = config.apiInternalUrl
+	const apiUrl = config.apiUrl
 	const maxRetries = 10
 	const retryDelay = 2000 // 2 seconds
 

@@ -1,3 +1,4 @@
 localFiles
 localFilesMeta
 node_modules
+.env

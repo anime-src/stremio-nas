@@ -6,55 +6,39 @@ services:
     ports:
       - "1222:1222" # Map host port 1222 to container port 1222
     environment:
-      # Internal URL: Addon connects to API server to fetch file list
-      # Can use Docker service name (internal) or external URL
-      - API_INTERNAL_URL=http://stremio-nas-api:3000
-      # Backward compatibility (deprecated, use API_INTERNAL_URL)
-      - MEDIA_API_URL=http://stremio-nas-api:3000
-      
-      # External URL: Base URL for stream URLs that Stremio will use to play videos
-      # Must be accessible from wherever Stremio is running (use your NAS IP)
-      - STREAM_BASE_URL=http://localhost:3001
-      # Backward compatibility (deprecated, use STREAM_BASE_URL)
-      - API_HOST=http://localhost:3001
+      # URL for addon to connect to API server
+      # Also used as base URL for stream URLs that Stremio will use
+      # Can use Docker service name (internal) or external URL (must be accessible from Stremio)
+      # Override in .env file or set here
+      - API_URL=${API_URL:-http://stremio-nas-api:3000}
       
       # API Key for authentication (optional - required if server has API_KEY configured)
       # Must match the API_KEY set in the server environment
-      - API_KEY=
+      # Override in .env file or set here
+      - API_KEY=${API_KEY:-}
       
       # Addon configuration
-      - PORT=1222
+      # Override in .env file or set here
+      - PORT=${PORT:-1222}
       
       # Polling configuration
-      - POLL_INTERVAL_MINUTES=5 # Poll API every 5 minutes for file updates
-      - ENABLE_POLLING=true # Set to false to disable periodic polling
+      # Override in .env file or set here
+      - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+      - ENABLE_POLLING=${ENABLE_POLLING:-true}
       
       # Logging
-      - LOG_LEVEL=debug
+      # Override in .env file or set here
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      
+      # Indexing configuration
+      # Override in .env file or set here
+      - MAX_INDEXED=${MAX_INDEXED:-10000}
     networks:
       - media-network
     depends_on:
       - stremio-nas-api # Optional: only needed if API is in the same compose file
 
-  # Optional: Include API service if you want to run both together
-  # Uncomment the following if you want to run both services in one compose file
-  # stremio-nas-api:
-  #   build: ../server
-  #   container_name: stremio-nas-api
-  #   restart: unless-stopped
-  #   ports:
-  #     - "3001:3000"
-  #   environment:
-  #     - PORT=3000
-  #     - MEDIA_DIR=/data/videos
-  #     - ALLOWED_EXTENSIONS=.mp4,.mkv,.avi
-  #     - ALLOW_TORRENTS=true
-  #     - API_HOST=http://localhost:3001
-  #     - LOG_LEVEL=info
-  #   volumes:
-  #     - C:\movies:/data/videos:ro
-  #   networks:
-  #     - media-network
+
 
 networks:
   media-network:
