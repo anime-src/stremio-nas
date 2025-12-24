@@ -1,4 +1,4 @@
-import { WatchFolder } from '../../types/watch-folder';
+import { WatchFolder } from '../../types/database';
 
 /**
  * Raw file data structure returned by storage providers

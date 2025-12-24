@@ -1,7 +1,7 @@
 import db from './database.service';
 import logger from '../config/logger';
 import config from '../config';
-import { WatchFolder } from '../types/watch-folder';
+import { WatchFolder } from '../types/database';
 
 /**
  * Dynamic configuration service that loads settings from database

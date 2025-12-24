@@ -93,7 +93,7 @@ async function startServer(): Promise<Server> {
 }
 
 // Start server if this file is run directly
-if (require.main === module) {
+if (import.meta.main) {
   startServer();
 }
 

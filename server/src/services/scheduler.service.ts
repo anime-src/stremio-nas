@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import logger from '../config/logger';
 import fileScannerService from './file-scanner.service';
-import { WatchFolder } from '../types/watch-folder';
+import { WatchFolder } from '../types/database';
 
 interface ScanResult {
   success: boolean;

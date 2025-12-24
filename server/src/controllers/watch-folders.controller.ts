@@ -3,7 +3,7 @@ import db from '../services/database.service';
 import scheduler from '../services/scheduler.service';
 import fileScanner from '../services/file-scanner.service';
 import logger from '../config/logger';
-import { WatchFolderDTO } from '../types/watch-folder';
+import { WatchFolderDTO } from '../types/dtos';
 import cron from 'node-cron';
 import { existsSync } from 'fs';
 

@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import logger from '../../../config/logger';
 import { IStorageProvider, RawFile, ScanOptions } from '../interface';
-import { WatchFolder } from '../../../types/watch-folder';
+import { WatchFolder } from '../../../types/database';
 
 /**
  * Local filesystem storage provider

@@ -13,7 +13,7 @@ export class ScanEntity {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   timestamp!: Date;
 
   @Column({ type: 'integer' })

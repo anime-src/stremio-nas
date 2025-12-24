@@ -1,5 +1,5 @@
 import logger from '../../config/logger';
-import { WatchFolder } from '../../types/watch-folder';
+import { WatchFolder } from '../../types/database';
 import { IStorageProvider } from './interface';
 import { LocalStorageProvider } from './providers/local.provider';
 import { NetworkStorageProvider } from './providers/network.provider';

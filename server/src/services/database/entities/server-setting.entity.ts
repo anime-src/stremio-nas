@@ -16,7 +16,7 @@ export class ServerSettingEntity {
   @Column({ type: 'text' })
   value!: string;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }
 

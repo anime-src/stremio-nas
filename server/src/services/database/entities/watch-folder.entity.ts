@@ -67,10 +67,10 @@ export class WatchFolderEntity {
   @Column({ type: 'text', nullable: true })
   domain?: string | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }
 

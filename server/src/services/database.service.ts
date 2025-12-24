@@ -1,11 +1,9 @@
 import 'reflect-metadata';
 import { DataSource, Repository } from 'typeorm';
-import path from 'path';
-import { existsSync, mkdirSync } from 'fs';
 import logger from '../config/logger';
 import config from '../config';
-import { FileRecord, DatabaseStats, ScanRecord } from '../types/database';
-import { WatchFolder, WatchFolderDTO } from '../types/watch-folder';
+import { FileRecord, DatabaseStats, ScanRecord, WatchFolder } from '../types/database';
+import { WatchFolderDTO } from '../types/dtos';
 import encryptionService from './encryption.service';
 import { IDatabaseService } from './database/interface';
 import { FileEntity } from './database/entities/file.entity';
@@ -38,14 +36,11 @@ class DatabaseService implements IDatabaseService {
   private async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    const dbType = (config.database.type || 'sqlite').toLowerCase();
+    const dbType = (config.database.type || 'postgresql').toLowerCase();
     
     // Map database type to TypeORM driver type
-    let typeormType: 'better-sqlite3' | 'postgres' | 'mysql' | 'mariadb';
+    let typeormType: 'postgres' | 'mysql' | 'mariadb';
     switch (dbType) {
-      case 'sqlite':
-        typeormType = 'better-sqlite3';
-        break;
       case 'postgresql':
         typeormType = 'postgres';
         break;
@@ -56,8 +51,8 @@ class DatabaseService implements IDatabaseService {
         typeormType = 'mariadb';
         break;
       default:
-        logger.warn('Unknown database type, defaulting to SQLite', { type: dbType });
-        typeormType = 'better-sqlite3';
+        logger.warn('Unknown database type, defaulting to PostgreSQL', { type: dbType });
+        typeormType = 'postgres';
     }
 
     // Prepare database connection options
@@ -68,34 +63,12 @@ class DatabaseService implements IDatabaseService {
       logging: config.logLevel === 'debug' ? ['query', 'error'] : ['error'],
     };
 
-    // Configure based on database type
-    if (typeormType === 'better-sqlite3') {
-      // SQLite configuration
-      const resolvedDbPath = path.isAbsolute(config.database.path)
-        ? config.database.path
-        : path.resolve(process.cwd(), config.database.path);
-
-      // Ensure storage directory exists
-      const storageDir = path.dirname(resolvedDbPath);
-      if (!existsSync(storageDir)) {
-        mkdirSync(storageDir, { recursive: true });
-        logger.info('Created storage directory', { path: storageDir });
-      }
-
-      dataSourceOptions.database = resolvedDbPath;
-      dataSourceOptions.extra = {
-        pragma: {
-          journal_mode: 'WAL',
-        },
-      };
-    } else {
-      // PostgreSQL, MySQL, MariaDB configuration
-      dataSourceOptions.host = config.database.host || 'localhost';
-      dataSourceOptions.port = config.database.port || (typeormType === 'postgres' ? 5432 : 3306);
-      dataSourceOptions.username = config.database.username;
-      dataSourceOptions.password = config.database.password;
-      dataSourceOptions.database = config.database.database || 'stremio_nas';
-    }
+    // Configure PostgreSQL, MySQL, or MariaDB connection
+    dataSourceOptions.host = config.database.host || 'localhost';
+    dataSourceOptions.port = config.database.port || (typeormType === 'postgres' ? 5432 : 3306);
+    dataSourceOptions.username = config.database.username || 'postgres';
+    dataSourceOptions.password = config.database.password;
+    dataSourceOptions.database = config.database.database || 'stremio_nas';
 
     this.dataSource = new DataSource(dataSourceOptions);
     
@@ -109,7 +82,9 @@ class DatabaseService implements IDatabaseService {
       this.initialized = true;
       logger.info('TypeORM database initialized', {
         type: config.database.type,
-        path: config.database.path,
+        host: config.database.host,
+        port: config.database.port,
+        database: config.database.database,
       });
     } catch (error: any) {
       logger.error('Failed to initialize database', { error: error.message });

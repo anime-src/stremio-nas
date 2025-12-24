@@ -1,5 +1,5 @@
-import { FileRecord, DatabaseStats, ScanRecord } from '../../types/database';
-import { WatchFolder, WatchFolderDTO } from '../../types/watch-folder';
+import { FileRecord, DatabaseStats, ScanRecord, WatchFolder } from '../../types/database';
+import { WatchFolderDTO } from '../../types/dtos';
 
 /**
  * Database service interface

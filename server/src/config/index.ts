@@ -24,8 +24,8 @@ export interface Config {
   };
   database: {
     type: 'sqlite' | 'postgresql' | 'mysql' | 'mariadb';
-    path: string;
-    // PostgreSQL/MySQL connection options (for future use)
+    path?: string; // Only used for SQLite
+    // PostgreSQL/MySQL connection options
     host?: string;
     port?: number;
     username?: string;
@@ -76,14 +76,14 @@ const config: Config = {
   
   // Database configuration
   database: {
-    type: (process.env.DB_TYPE || 'sqlite') as 'sqlite' | 'postgresql' | 'mysql' | 'mariadb',
-    path: process.env.DB_PATH || './storage/media.db',
-    // PostgreSQL/MySQL connection options (optional, only used for non-SQLite databases)
-    host: process.env.DB_HOST,
+    type: (process.env.DB_TYPE || 'postgresql') as 'sqlite' | 'postgresql' | 'mysql' | 'mariadb',
+    path: process.env.DB_PATH, // Only used for SQLite
+    // PostgreSQL/MySQL connection options
+    host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
-    username: process.env.DB_USERNAME,
+    username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
+    database: process.env.DB_NAME || 'stremio_nas'
   },
   
   // Logging configuration

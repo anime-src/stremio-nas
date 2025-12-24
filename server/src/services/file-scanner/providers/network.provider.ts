@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import logger from '../../../config/logger';
 import db from '../../database.service';
 import { IStorageProvider, RawFile, ScanOptions } from '../interface';
-import { WatchFolder } from '../../../types/watch-folder';
+import { WatchFolder } from '../../../types/database';
 import { LocalStorageProvider } from './local.provider';
 
 const execAsync = promisify(exec);

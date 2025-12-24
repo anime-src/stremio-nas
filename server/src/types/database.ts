@@ -1,5 +1,3 @@
-import Database from 'better-sqlite3';
-
 /**
  * Database file record interface
  */
@@ -61,20 +59,30 @@ export interface ScanRecord {
 }
 
 /**
- * Prepared statements interface
+ * Watch folder configuration interface
  */
-export interface PreparedStatements {
-  insertFile: Database.Statement<FileRecord>;
-  getAllFiles: Database.Statement<[]>;
-  getFileById: Database.Statement<[number]>;
-  getFileByPath: Database.Statement<[string]>;
-  getFilesByImdb: Database.Statement<[string]>;
-  deleteFile: Database.Statement<[string]>;
-  clearFiles: Database.Statement<[]>;
-  searchFiles: Database.Statement<[string, string]>;
-  filterByExtension: Database.Statement<[string]>;
-  insertScan: Database.Statement<[number, number, number, number, number, number | null]>;
-  getScanHistory: Database.Statement<[number]>;
-  getStats: Database.Statement<[]>;
-  getTypeStats: Database.Statement<[]>;
+export interface WatchFolder {
+  id?: number;
+  path: string;
+  name?: string | null;
+  enabled: boolean;
+  scan_interval: string; // cron expression
+  allowed_extensions: string[]; // e.g., [".mp4", ".mkv"]
+  min_video_size_mb: number;
+  temporary_extensions: string[]; // e.g., [".part", ".tmp"]
+  type: 'local' | 'network' | 's3';
+  username?: string | null;
+  password_encrypted?: string | null; // Never returned in API responses
+  domain?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Server setting interface
+ */
+export interface ServerSetting {
+  key: string;
+  value: string;
+  updated_at?: string;
 }

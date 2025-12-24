@@ -42,10 +42,10 @@ export class FileEntity {
   @Index('idx_files_path')
   path!: string;
 
-  @Column({ type: 'integer' })
+  @Column({ type: 'bigint' })
   size!: number;
 
-  @Column({ type: 'integer' })
+  @Column({ type: 'bigint' })
   mtime!: number;
 
   @Column({ type: 'text', nullable: true })
@@ -120,10 +120,10 @@ export class FileEntity {
   @Column({ type: 'integer', nullable: true })
   watch_folder_id?: number | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt!: Date;
 }
 

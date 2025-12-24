@@ -1,4 +1,22 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: stremio-nas-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${DB_USERNAME:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-stremio_nas}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - media-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   stremio-nas-api:
     build: ./server
     container_name: stremio-nas-api
@@ -22,8 +40,13 @@ services:
       # File filtering
       - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-.mp4,.mkv,.avi}
       
-      # Database configuration
-      - DB_PATH=${DB_PATH:-/app/storage/media.db}
+      # Database configuration (PostgreSQL)
+      - DB_TYPE=${DB_TYPE:-postgresql}
+      - DB_HOST=postgres
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-stremio_nas}
       
       # API configuration - IMPORTANT: Set HOST_IP in .env file
       - API_HOST=http://${HOST_IP:-localhost}:${API_PORT:-3001}
@@ -68,11 +91,14 @@ services:
     networks:
       - media-network
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 5s
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   stremio-nas-addon:
     build: ./addon
@@ -132,7 +158,9 @@ services:
 
 volumes:
   stremio-nas-db:
-    # Database storage - removed when running 'docker compose down -v' or 'podman compose down -v'
+    # Application storage - removed when running 'docker compose down -v' or 'podman compose down -v'
+  postgres-data:
+    # PostgreSQL data - removed when running 'docker compose down -v' or 'podman compose down -v'
 
 networks:
   media-network:
